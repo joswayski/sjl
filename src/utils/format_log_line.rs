@@ -31,11 +31,22 @@ pub fn format_log_line(
         ),
     };
 
-    format!(
-        r#"{{"level":"{}","timestamp":"{}","data":{}}}"#,
-        level_str,
-        // Serialize once on flush
-        log.timestamp.format(timestamp_format),
-        serde_json::to_string(&log.data).unwrap()
-    )
+    if let Some(msg) = &log.message {
+        format!(
+            r#"{{"level":"{}","timestamp":"{}", "message": "{}","data":{}}}"#,
+            level_str,
+            // Serialize once on flush
+            log.timestamp.format(timestamp_format),
+            msg,
+            serde_json::to_string(&log.data).unwrap()
+        )
+    } else {
+        format!(
+            r#"{{"level":"{}","timestamp":"{}","data":{}}}"#,
+            level_str,
+            // Serialize once on flush
+            log.timestamp.format(timestamp_format),
+            serde_json::to_string(&log.data).unwrap()
+        )
+    }
 }

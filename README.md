@@ -1,5 +1,4 @@
 # sjl - Simple JSON Logger
-⚠️ WIP ⚠️
 
  📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
 
@@ -72,8 +71,7 @@ struct Metadata {
     notes: Option<String>,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     // Initialize once at startup
     Logger::init()
         .min_level(LogLevel::Debug)       // Minimum log level (default: Debug)
@@ -107,7 +105,7 @@ async fn main() {
         verified: true
     });
 
-    // 5. Enum variants serialize corerctly
+    // 5. Enum variants serialize correctly
     warn!(Status::Active);
     warn!(Status::RateLimited { retry_after: 60 });
 
@@ -169,15 +167,15 @@ async fn main() {
 
 ### Output
 ```json
-{"level":"DEBUG","timestamp":"2025-10-28T10:05:36.950Z","data":"Application started"}
-{"level":"INFO","timestamp":"2025-10-28T10:05:36.950Z","data":"0.0.0.0:8080"}
-{"level":"INFO","timestamp":"2025-10-28T10:05:36.950Z","data":{"id":1,"name":"Alice","verified":true}}
-{"level":"INFO","timestamp":"2025-10-28T10:05:36.950Z","data":{"id":1,"name":"Alice","verified":true}}
-{"level":"WARN","timestamp":"2025-10-28T10:05:36.950Z","data":"Active"}
-{"level":"WARN","timestamp":"2025-10-28T10:05:36.950Z","data":{"RateLimited":{"retry_after":60}}}
-{"level":"ERROR","timestamp":"2025-10-28T10:05:36.950Z","data":{"error":"connection_failed","host":"db.example.com","port":5432}}
-{"level":"ERROR","timestamp":"2025-10-28T10:05:36.950Z","data":{"host":"db.example.com","port":5432,"retry_count":3}}
-{"level":"INFO","timestamp":"2025-10-28T10:05:36.950Z","data":{"items":[{"name":"Premium Widget","price":29.99,"quantity":2,"sku":"WIDGET-001","status":"Active"},{"name":"Super Gadget","price":49.99,"quantity":1,"sku":"GADGET-002","status":{"RateLimited":{"retry_after":30}}}],"metadata":{"notes":"Handle with care","priority":1,"tags":["express","gift"]},"order_id":"ORD-2024-001","shipping_address":{"city":"San Francisco","country":"USA","street":"123 Main St"},"status":"Active","user":{"id":42,"name":"John Doe","verified":true}}}
+{"level":"DEBUG","timestamp":"2025-10-28T10:14:41.229Z","data":"Application started"}
+{"level":"INFO","timestamp":"2025-10-28T10:14:41.229Z", "message": "Server listening","data":"0.0.0.0:8080"}
+{"level":"INFO","timestamp":"2025-10-28T10:14:41.229Z","data":{"id":1,"name":"Alice","verified":true}}
+{"level":"INFO","timestamp":"2025-10-28T10:14:41.229Z", "message": "User authenticated","data":{"id":1,"name":"Alice","verified":true}}
+{"level":"WARN","timestamp":"2025-10-28T10:14:41.229Z","data":"Active"}
+{"level":"WARN","timestamp":"2025-10-28T10:14:41.229Z","data":{"RateLimited":{"retry_after":60}}}
+{"level":"ERROR","timestamp":"2025-10-28T10:14:41.229Z","data":{"error":"connection_failed","host":"db.example.com","port":5432}}
+{"level":"ERROR","timestamp":"2025-10-28T10:14:41.229Z", "message": "Database connection failed","data":{"host":"db.example.com","port":5432,"retry_count":3}}
+{"level":"INFO","timestamp":"2025-10-28T10:14:41.229Z", "message": "Order processed","data":{"items":[{"name":"Premium Widget","price":29.99,"quantity":2,"sku":"WIDGET-001","status":"Active"},{"name":"Super Gadget","price":49.99,"quantity":1,"sku":"GADGET-002","status":{"RateLimited":{"retry_after":30}}}],"metadata":{"notes":"Handle with care","priority":1,"tags":["express","gift"]},"order_id":"ORD-2024-001","shipping_address":{"city":"San Francisco","country":"USA","street":"123 Main St"},"status":"Active","user":{"id":42,"name":"John Doe","verified":true}}}
 ```
 
 

@@ -109,7 +109,7 @@ impl Logger {
         }
     }
 
-    fn log<T: Serialize>(self: &Self, message: Option<String>, data: &T, log_level: LogLevel) {
+    fn log<T: Serialize>(&self, message: Option<String>, data: &T, log_level: LogLevel) {
         if log_level < self.min_level {
             return;
         }
@@ -180,28 +180,28 @@ impl Logger {
     /// Log a message at the INFO level.
     ///
     /// Accepts any type that implements [`serde::Serialize`].
-    pub fn info<T: Serialize>(self: &Self, data: &T) {
+    pub fn info<T: Serialize>(&self, data: &T) {
         self.log(None, data, LogLevel::Info);
     }
 
     /// Log a message at the ERROR level.
     ///
     /// Accepts any type that implements [`serde::Serialize`].
-    pub fn error<T: Serialize>(self: &Self, data: &T) {
+    pub fn error<T: Serialize>(&self, data: &T) {
         self.log(None, data, LogLevel::Error);
     }
 
     /// Log a message at the WARN level.
     ///
     /// Accepts any type that implements [`serde::Serialize`].
-    pub fn warn<T: Serialize>(self: &Self, data: &T) {
+    pub fn warn<T: Serialize>(&self, data: &T) {
         self.log(None, data, LogLevel::Warn);
     }
 
     /// Log a message at the DEBUG level.
     ///
     /// Accepts any type that implements [`serde::Serialize`].
-    pub fn debug<T: Serialize>(self: &Self, data: &T) {
+    pub fn debug<T: Serialize>(&self, data: &T) {
         self.log(None, data, LogLevel::Debug);
     }
 
