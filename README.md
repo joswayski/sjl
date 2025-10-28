@@ -1,7 +1,17 @@
 # sjl - Simple JSON Logger
 ⚠️ WIP ⚠️
 
- 📦 **[crates.io](https://crates.io/crates/sajl)** | 📚 **[docs.rs](https://docs.rs/sajl)**
+ 📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
+
+### Why?
+I mostly need JSON logging without the quirks: [enums that serialize correctly](https://github.com/tokio-rs/tracing/issues/3051) and [clean output out of the box](https://josevalerio.com/rust-json-logging), *not* escaped strings.
+
+I built this because the [tracing crate](https://crates.io/crates/tracing)'s `valuable` support has been behind an [unstable feature flag for over three years](https://github.com/tokio-rs/tracing/discussions/1906) and the  [slog](https://crates.io/crates/slog) crate also doesn't seem to provide this..
+
+If you want a simple JSON logger, this might be useful for you too.
+
+
+
 
  ## Installation
 
@@ -157,14 +167,17 @@ async fn main() {
 }
 ```
 
-
-
-### Why?
-I mostly need JSON logging without the quirks: [enums that serialize correctly](https://github.com/tokio-rs/tracing/issues/3051) and [clean output out of the box](https://josevalerio.com/rust-json-logging), *not* escaped strings.
-
-I built this because the [tracing crate](https://crates.io/crates/tracing)'s `valuable` support has been behind an [unstable feature flag for over three years](https://github.com/tokio-rs/tracing/discussions/1906) and the  [slog](https://crates.io/crates/slog) crate also doesn't seem to provide this..
-
-If you want a simple JSON logger, this might be useful for you too.
-
+### Output
+```json
+{"level":"DEBUG","timestamp":"2025-10-28T10:05:36.950Z","data":"Application started"}
+{"level":"INFO","timestamp":"2025-10-28T10:05:36.950Z","data":"0.0.0.0:8080"}
+{"level":"INFO","timestamp":"2025-10-28T10:05:36.950Z","data":{"id":1,"name":"Alice","verified":true}}
+{"level":"INFO","timestamp":"2025-10-28T10:05:36.950Z","data":{"id":1,"name":"Alice","verified":true}}
+{"level":"WARN","timestamp":"2025-10-28T10:05:36.950Z","data":"Active"}
+{"level":"WARN","timestamp":"2025-10-28T10:05:36.950Z","data":{"RateLimited":{"retry_after":60}}}
+{"level":"ERROR","timestamp":"2025-10-28T10:05:36.950Z","data":{"error":"connection_failed","host":"db.example.com","port":5432}}
+{"level":"ERROR","timestamp":"2025-10-28T10:05:36.950Z","data":{"host":"db.example.com","port":5432,"retry_count":3}}
+{"level":"INFO","timestamp":"2025-10-28T10:05:36.950Z","data":{"items":[{"name":"Premium Widget","price":29.99,"quantity":2,"sku":"WIDGET-001","status":"Active"},{"name":"Super Gadget","price":49.99,"quantity":1,"sku":"GADGET-002","status":{"RateLimited":{"retry_after":30}}}],"metadata":{"notes":"Handle with care","priority":1,"tags":["express","gift"]},"order_id":"ORD-2024-001","shipping_address":{"city":"San Francisco","country":"USA","street":"123 Main St"},"status":"Active","user":{"id":42,"name":"John Doe","verified":true}}}
+```
 
 
