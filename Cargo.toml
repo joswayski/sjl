@@ -1,0 +1,9 @@
+[package]
+name = "sjl"
+version = "0.1.0"
+edition = "2024"
+description = "Simple JSON Logger"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/joswayski/sjl"
+keywords = ["simple", "structured", "json", "logging", "logger"]
