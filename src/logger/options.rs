@@ -88,6 +88,9 @@ impl LoggerOptions {
     ///
     /// This spawns a background task that handles batching and writing logs.
     /// The logger is ready to use immediately after calling this method.
+    ///
+    /// When the program exits, the logger will automatically flush all remaining
+    /// logs before shutting down.
     pub fn build(self) -> &'static Logger {
         // If already initialized, return it
         if let Some(logger) = GLOBAL_LOGGER.get() {
@@ -98,6 +101,7 @@ impl LoggerOptions {
         }
 
         let (log_sender, log_receiver) = crossbeam_channel::bounded::<LogObject>(self.buffer_size);
+        let (shutdown_sender, shutdown_receiver) = crossbeam_channel::bounded::<()>(1);
 
         // Move configuration into the worker thread
         let timestamp_format = self.timestamp_format.clone();
@@ -105,7 +109,7 @@ impl LoggerOptions {
         let batch_size = self.batch_size;
         let batch_duration = Duration::from_millis(self.batch_duration_ms);
 
-        std::thread::spawn(move || {
+        let worker_thread = std::thread::spawn(move || {
             let mut batch = Vec::<LogObject>::with_capacity(batch_size);
             let mut deadline = crossbeam_channel::after(batch_duration);
 
@@ -121,6 +125,7 @@ impl LoggerOptions {
                             }
                         }
                         Err(_) => {
+                            // Sender disconnected, flush remaining logs and exit
                             if !batch.is_empty() {
                                 flush_batch(&batch, &timestamp_format, &colors);
                             }
@@ -134,20 +139,56 @@ impl LoggerOptions {
                             batch.clear();
                         }
                         deadline = crossbeam_channel::after(batch_duration);
+                    },
+
+                    recv(shutdown_receiver) -> _ => {
+                        // Shutdown signal received - drain all remaining logs
+                        // First, drop our receiver handle to stop receiving new messages
+                        drop(shutdown_receiver);
+
+                        // Drain any remaining messages in the channel
+                        while let Ok(log) = log_receiver.try_recv() {
+                            batch.push(log);
+                            if batch.len() >= batch_size {
+                                flush_batch(&batch, &timestamp_format, &colors);
+                                batch.clear();
+                            }
+                        }
+
+                        // Flush final batch
+                        if !batch.is_empty() {
+                            flush_batch(&batch, &timestamp_format, &colors);
+                        }
+                        break;
                     }
                 }
             }
         });
+
+        let shutdown_handle = std::sync::Arc::new(super::logger::ShutdownHandle::new(
+            shutdown_sender,
+            worker_thread,
+        ));
 
         let logger = Logger {
             log_sender,
             min_level: self.min_level,
             timestamp_format: self.timestamp_format,
             color_settings: colors,
+            shutdown_handle,
         };
 
         let logger_ref = match GLOBAL_LOGGER.set(logger) {
-            Ok(_) => GLOBAL_LOGGER.get().unwrap(),
+            Ok(_) => {
+                // Register atexit handler to ensure logs are flushed on shutdown
+                extern "C" fn shutdown_handler() {
+                    crate::globals::shutdown_global_logger();
+                }
+                unsafe {
+                    libc::atexit(shutdown_handler);
+                }
+                GLOBAL_LOGGER.get().unwrap()
+            }
             // Incase of a race condition, return the existing one
             Err(_) => GLOBAL_LOGGER.get().unwrap(),
         };

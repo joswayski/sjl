@@ -1,4 +1,5 @@
 use std::io::{Write, stderr};
+use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use serde::Serialize;
@@ -25,6 +26,48 @@ pub(crate) struct LogObject {
     pub(crate) message: Option<String>,
 }
 
+/// Handles graceful shutdown of the logger worker thread.
+///
+/// When dropped, this will signal the worker thread to finish processing
+/// any remaining logs and wait for it to complete.
+pub(crate) struct ShutdownHandle {
+    shutdown_sender: Mutex<Option<crossbeam_channel::Sender<()>>>,
+    worker_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+impl ShutdownHandle {
+    pub(crate) fn new(
+        shutdown_sender: crossbeam_channel::Sender<()>,
+        worker_thread: std::thread::JoinHandle<()>,
+    ) -> Self {
+        Self {
+            shutdown_sender: Mutex::new(Some(shutdown_sender)),
+            worker_thread: Mutex::new(Some(worker_thread)),
+        }
+    }
+
+    /// Trigger shutdown and wait for worker thread to finish processing all logs.
+    pub(crate) fn shutdown(&self) {
+        // Drop the shutdown sender to signal the worker thread
+        if let Ok(mut sender) = self.shutdown_sender.lock() {
+            sender.take();
+        }
+
+        // Wait for worker thread to finish processing
+        if let Ok(mut handle) = self.worker_thread.lock() {
+            if let Some(thread) = handle.take() {
+                let _ = thread.join();
+            }
+        }
+    }
+}
+
+impl Drop for ShutdownHandle {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
 /// An async JSON logger with batched writes and colorized output.
 ///
 /// Create a new logger using the builder pattern:
@@ -41,6 +84,7 @@ pub struct Logger {
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: String,
     pub(crate) color_settings: ColorSettings,
+    pub(crate) shutdown_handle: Arc<ShutdownHandle>,
 }
 
 impl Logger {

@@ -243,6 +243,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "crossbeam-channel",
+ "libc",
  "owo-colors",
  "serde",
  "serde_json",
