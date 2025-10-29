@@ -5,11 +5,9 @@ use crate::{
     LogLevel, Logger, RGB,
     colors::ColorSettings,
     globals::GLOBAL_LOGGER,
-    logger::LoggerContext,
+    logger::{LogObject, LoggerContext, logger::ShutdownHandle},
     utils::{RESERVED_FIELD_NAMES, flush_batch},
 };
-
-use super::LogObject;
 
 /// Builder for configuring a [`Logger`] instance.
 ///
@@ -192,12 +190,9 @@ impl LoggerOptions {
             }
         });
 
-        let shutdown_handle = std::sync::Arc::new(super::logger::ShutdownHandle::new(
-            shutdown_sender,
-            worker_thread,
-        ));
+        let shutdown_handle = Arc::new(ShutdownHandle::new(shutdown_sender, worker_thread));
 
-        let logger = super::logger::Logger {
+        let logger = Logger {
             log_sender,
             min_level: self.min_level,
             timestamp_format: self.timestamp_format,
