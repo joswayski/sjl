@@ -14,6 +14,7 @@ If you just want a simple JSON logger, you might find this useful.
 - Customizable colors, timestamps, batch sizes
 - Works with any `Serialize` type
 - Macros! `debug!()`, `info!()`, `warn!()`, and `error!()`
+- Global context fields that appear in every log message
 
 
  ## Installation
@@ -35,9 +36,10 @@ struct User {
 }
 
 #[derive(Serialize)]
-enum Status {
-    Active,
-    RateLimited { retry_after: u32 },
+enum OrderStatus {
+    Pending,
+    Shipped { tracking_number: String },
+    Delivered,
 }
 
 #[derive(Serialize)]
@@ -50,7 +52,8 @@ struct Order {
 struct OrderItem {
     name: String,
     price: f64,
-    status: Status,
+    quantity: u32,
+    status: OrderStatus,
 }
 
 fn main() {
@@ -66,6 +69,14 @@ fn main() {
         .info_color(RGB::new(15, 115, 255))
         .warn_color(RGB::new(247, 155, 35))
         .error_color(RGB::new(255, 0, 0))
+        // Context fields appear in EVERY log message at the top level
+        .context("environment", "production")
+        .context("service", "order-api")
+        .context("metadata", json!({
+            "instance_id": "i-1234567890abcdef0",
+            "pod_name": "order-api-7d4f8c9b5-x8k2p",
+            "git_sha": "abc123f"
+        }))
         // Call this at the end
         .build(); 
 
@@ -78,8 +89,8 @@ fn main() {
     info!("User authenticated", User { id: 1, name: "Alice".into() });
 
     // Enums (serialize correctly!)
-    warn!(Status::Active);
-    warn!(Status::RateLimited { retry_after: 60 });
+    warn!(OrderStatus::Pending);
+    warn!(OrderStatus::Shipped { tracking_number: "1Z999AA10123456784".into() });
 
     // Ad-hoc JSON
     error!(json!({
@@ -94,12 +105,14 @@ fn main() {
             OrderItem {
                 name: "Widget".into(),
                 price: 29.99,
-                status: Status::Active,
+                quantity: 2,
+                status: OrderStatus::Shipped { tracking_number: "1Z999AA10123456784".into() },
             },
             OrderItem {
                 name: "Gadget".into(),
                 price: 49.99,
-                status: Status::RateLimited { retry_after: 30 },
+                quantity: 1,
+                status: OrderStatus::Pending,
             },
         ],
     });
@@ -108,18 +121,12 @@ fn main() {
 
 ### Output
 ```json
-{"level":"DEBUG","timestamp":"2025-10-29T01:01:02.560Z","data":"App started"}
-{"level":"INFO","timestamp":"2025-10-29T01:01:02.560Z", "message": "Server listening","data":"0.0.0.0:8080"}
-{"level":"INFO","timestamp":"2025-10-29T01:01:02.560Z","data":{"id":1,"name":"Alice"}}
-{"level":"INFO","timestamp":"2025-10-29T01:01:02.560Z", "message": "User authenticated","data":{"id":1,"name":"Alice"}}
-{"level":"WARN","timestamp":"2025-10-29T01:01:02.560Z","data":"Active"}
-{"level":"WARN","timestamp":"2025-10-29T01:01:02.560Z","data":{"RateLimited":{"retry_after":60}}}
-{"level":"ERROR","timestamp":"2025-10-29T01:01:02.560Z","data":{"error":"connection_failed","host":"db.example.com"}}
-{"level":"INFO","timestamp":"2025-10-29T01:01:02.560Z", "message": "Order processed","data":{"items":[{"name":"Widget","price":29.99,"status":"Active"},{"name":"Gadget","price":49.99,"status":{"RateLimited":{"retry_after":30}}}],"user":{"id":42,"name":"John"}}}
+{"level":"DEBUG","timestamp":"2025-10-29T02:50:44.506Z","data":"App started","service": "order-api", "environment": "production", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","timestamp":"2025-10-29T02:50:44.506Z","message":"Server listening","data":"0.0.0.0:8080","service": "order-api", "environment": "production", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","timestamp":"2025-10-29T02:50:44.506Z","data":{"id":1,"name":"Alice"},"service": "order-api", "environment": "production", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","timestamp":"2025-10-29T02:50:44.506Z","message":"User authenticated","data":{"id":1,"name":"Alice"},"service": "order-api", "environment": "production", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"WARN","timestamp":"2025-10-29T02:50:44.506Z","data":"Pending","service": "order-api", "environment": "production", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"WARN","timestamp":"2025-10-29T02:50:44.506Z","data":{"Shipped":{"tracking_number":"1Z999AA10123456784"}},"service": "order-api", "environment": "production", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"ERROR","timestamp":"2025-10-29T02:50:44.506Z","data":{"error":"connection_failed","host":"db.example.com"},"service": "order-api", "environment": "production", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","timestamp":"2025-10-29T02:50:44.506Z","message":"Order processed","data":{"items":[{"name":"Widget","price":29.99,"quantity":2,"status":{"Shipped":{"tracking_number":"1Z999AA10123456784"}}},{"name":"Gadget","price":49.99,"quantity":1,"status":"Pending"}],"user":{"id":42,"name":"John"}},"service": "order-api", "environment": "production", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
 ```
-
-
-
-## Roadmap
-Feel free to open an issue if you'd like to see something else!
-- [ ] Structured context fields (e.g., add `service`, `env` to all logs)

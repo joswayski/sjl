@@ -5,6 +5,7 @@ use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::logger::LoggerContext;
 use crate::{
     colors::ColorSettings,
     constants::{
@@ -24,6 +25,8 @@ pub(crate) struct LogObject {
     pub(crate) timestamp: chrono::DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) message: Option<String>,
+    #[serde(skip)] // We will handle this
+    pub(crate) context: Arc<LoggerContext>,
 }
 
 /// Handles graceful shutdown of the logger worker thread.
@@ -85,6 +88,7 @@ pub struct Logger {
     pub(crate) timestamp_format: String,
     pub(crate) color_settings: ColorSettings,
     pub(crate) shutdown_handle: Arc<ShutdownHandle>,
+    pub(crate) context: Arc<LoggerContext>,
 }
 
 impl Logger {
@@ -106,6 +110,7 @@ impl Logger {
             min_level: LogLevel::Debug,
             timestamp_format: DEFAULT_TIMESTAMP_FORMAT.to_string(),
             color_settings: ColorSettings::default(),
+            context: LoggerContext::new(),
         }
     }
 
@@ -126,6 +131,7 @@ impl Logger {
             data: value,
             message,
             timestamp: Utc::now(),
+            context: Arc::clone(&self.context),
         };
 
         if let Err(err) = self.log_sender.try_send(log_object) {
@@ -138,6 +144,7 @@ impl Logger {
                         data: log.data,
                         message: log.message,
                         timestamp: Utc::now(),
+                        context: Arc::clone(&self.context),
                     };
                     writeln!(
                         stderr,
@@ -150,7 +157,8 @@ impl Logger {
                         message: None,
                         log_level:  LogLevel::Warn,
                         data: serde_json::to_value("Logger buffer full - consider increasing the buffer_size! This log bypassed batching.").unwrap(),
-                        timestamp: Utc::now()
+                        timestamp: Utc::now(),
+                        context: Arc::clone(&self.context),
                     };
 
                     writeln!(
@@ -166,6 +174,7 @@ impl Logger {
                         data: log.data,
                         message: log.message,
                         timestamp: Utc::now(),
+                        context: Arc::clone(&self.context),
                     };
                     writeln!(
                         stderr,

@@ -9,9 +9,10 @@ struct User {
 }
 
 #[derive(Serialize)]
-enum Status {
-    Active,
-    RateLimited { retry_after: u32 },
+enum OrderStatus {
+    Pending,
+    Shipped { tracking_number: String },
+    Delivered,
 }
 
 #[derive(Serialize)]
@@ -24,7 +25,8 @@ struct Order {
 struct OrderItem {
     name: String,
     price: f64,
-    status: Status,
+    quantity: u32,
+    status: OrderStatus,
 }
 
 fn main() {
@@ -40,6 +42,17 @@ fn main() {
         .info_color(RGB::new(15, 115, 255))
         .warn_color(RGB::new(247, 155, 35))
         .error_color(RGB::new(255, 0, 0))
+        // Context fields appear in EVERY log message at the top level
+        .context("environment", "production")
+        .context("service", "order-api")
+        .context(
+            "metadata",
+            json!({
+                "instance_id": "i-1234567890abcdef0",
+                "pod_name": "order-api-7d4f8c9b5-x8k2p",
+                "git_sha": "abc123f"
+            }),
+        )
         // Call this at the end
         .build();
 
@@ -61,8 +74,10 @@ fn main() {
     );
 
     // Enums (serialize correctly!)
-    warn!(Status::Active);
-    warn!(Status::RateLimited { retry_after: 60 });
+    warn!(OrderStatus::Pending);
+    warn!(OrderStatus::Shipped {
+        tracking_number: "1Z999AA10123456784".into()
+    });
 
     // Ad-hoc JSON
     error!(json!({
@@ -82,12 +97,16 @@ fn main() {
                 OrderItem {
                     name: "Widget".into(),
                     price: 29.99,
-                    status: Status::Active,
+                    quantity: 2,
+                    status: OrderStatus::Shipped {
+                        tracking_number: "1Z999AA10123456784".into()
+                    },
                 },
                 OrderItem {
                     name: "Gadget".into(),
                     price: 49.99,
-                    status: Status::RateLimited { retry_after: 30 },
+                    quantity: 1,
+                    status: OrderStatus::Pending,
                 },
             ],
         }
