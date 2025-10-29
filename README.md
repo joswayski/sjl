@@ -3,7 +3,7 @@
  📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
 
 ### Why?
-The most popular logging crate, [tracing](https://crates.io/crates/tracing), has [problems with nested JSON](https://www.reddit.com/r/rust/comments/1k75jvc/how_can_i_emit_a_tracing_event_with_an_unescaped/) unless you use the `valuable` crate with it which is [unstable and behind a feature flag for 3 years]((https://github.com/tokio-rs/tracing/discussions/1906))... but that [still has issues with enums](https://github.com/tokio-rs/tracing/issues/3051) and doesn't feel natural to use with `.as_value()` everywhere.  The [slog](https://crates.io/crates/slog) crate has similar issues—I've written about both [here](https://josevalerio.com/rust-json-logging).
+The most popular logging crate, [tracing](https://crates.io/crates/tracing), has [problems with nested JSON](https://www.reddit.com/r/rust/comments/1k75jvc/how_can_i_emit_a_tracing_event_with_an_unescaped/) unless you use the `valuable` crate with it which is [unstable and behind a feature flag for 3 years](https://github.com/tokio-rs/tracing/discussions/1906)... but that [still has issues with enums](https://github.com/tokio-rs/tracing/issues/3051) and doesn't feel natural to use with `.as_value()` everywhere.  The [slog](https://crates.io/crates/slog) crate has similar issues—I've written about both [here](https://josevalerio.com/rust-json-logging).
 
 If you just want a simple JSON logger, you might find this useful.
 
