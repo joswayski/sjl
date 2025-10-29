@@ -64,7 +64,7 @@ pub fn format_log_line(
 
     // Prepend a comma if there are context fields, so they merge seamlessly into the JSON
     // If empty: ""
-    // If not empty: ,"environment": "production","service": {...}
+    // If not empty: ,"environment": "production", "service": {...}
     let context_part = if context_fields.is_empty() {
         String::new()
     } else {
@@ -85,7 +85,7 @@ pub fn format_log_line(
             log.timestamp.format(timestamp_format),
             msg,
             serde_json::to_string(&log.data).unwrap(), // Already valid JSON
-            context_part                               // Either "" or ",key: value,key2: value2"
+            context_part                               // Either "" or ",key: value, key2: value2"
         )
     } else {
         format!(
