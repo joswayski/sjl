@@ -8,7 +8,7 @@ pub(crate) const RESERVED_FIELD_NAMES: [&str; 5] =
     ["level", "timestamp", "context", "message", "data"];
 
 #[derive(Serialize)]
-pub(crate) struct LogOutput<'a> {
+pub struct LogOutput<'a> {
     level: &'a str,
     timestamp: String,
     #[serde(flatten)]

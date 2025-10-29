@@ -99,7 +99,7 @@ impl LoggerOptions {
         let key_string = key.into();
 
         match key_string.as_str() {
-            "level" | "timestamp" | "data" | "message" => {
+            "level" | "timestamp" | "context" | "data" | "message" => {
                 panic!(
                     "Cannot use {} as a context key - it's a reservd field name. Reserved fields: {}",
                     key_string,
