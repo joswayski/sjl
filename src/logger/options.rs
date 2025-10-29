@@ -1,8 +1,13 @@
-use std::time::Duration;
+use serde_json::Value;
+use std::{sync::Arc, time::Duration};
 
-use crate::{LogLevel, RGB, colors::ColorSettings, globals::GLOBAL_LOGGER, utils::flush_batch};
-
-use super::{LogObject, Logger};
+use crate::{
+    LogLevel, Logger, RGB,
+    colors::ColorSettings,
+    globals::GLOBAL_LOGGER,
+    logger::{LogObject, LoggerContext, logger::ShutdownHandle},
+    utils::{RESERVED_FIELD_NAMES, flush_batch},
+};
 
 /// Builder for configuring a [`Logger`] instance.
 ///
@@ -14,6 +19,7 @@ pub struct LoggerOptions {
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: String,
     pub(crate) color_settings: ColorSettings,
+    pub(crate) context: LoggerContext,
 }
 
 impl LoggerOptions {
@@ -82,6 +88,25 @@ impl LoggerOptions {
     /// Sets the error color using [`RGB`]
     pub fn error_color(mut self, color: RGB) -> Self {
         self.color_settings.error = color;
+        self
+    }
+
+    /// Sets global context for every log message
+    /// For example, environment or service-name
+    pub fn context(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
+        let key_string = key.into();
+
+        match key_string.as_str() {
+            "level" | "timestamp" | "context" | "data" | "message" => {
+                panic!(
+                    "Cannot use {} as a context key - it's a reservd field name. Reserved fields: {}",
+                    key_string,
+                    RESERVED_FIELD_NAMES.join(", ")
+                )
+            }
+            _ => {}
+        }
+        self.context.insert(key_string, value.into());
         self
     }
     /// Build and initialize the logger.
@@ -165,10 +190,7 @@ impl LoggerOptions {
             }
         });
 
-        let shutdown_handle = std::sync::Arc::new(super::logger::ShutdownHandle::new(
-            shutdown_sender,
-            worker_thread,
-        ));
+        let shutdown_handle = Arc::new(ShutdownHandle::new(shutdown_sender, worker_thread));
 
         let logger = Logger {
             log_sender,
@@ -176,6 +198,7 @@ impl LoggerOptions {
             timestamp_format: self.timestamp_format,
             color_settings: colors,
             shutdown_handle,
+            context: Arc::new(self.context),
         };
 
         let logger_ref = match GLOBAL_LOGGER.set(logger) {

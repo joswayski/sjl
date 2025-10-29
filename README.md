@@ -3,13 +3,18 @@
  📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
 
 ### Why?
-I mostly need JSON logging without the quirks: [enums that serialize correctly](https://github.com/tokio-rs/tracing/issues/3051) and [clean output out of the box](https://josevalerio.com/rust-json-logging), *not* escaped strings.
+The most popular logging crate, [tracing](https://crates.io/crates/tracing), has [problems with nested JSON](https://www.reddit.com/r/rust/comments/1k75jvc/how_can_i_emit_a_tracing_event_with_an_unescaped/) unless you use the `valuable` crate with it which is [unstable and behind a feature flag for 3 years](https://github.com/tokio-rs/tracing/discussions/1906)... but that [still has issues with enums](https://github.com/tokio-rs/tracing/issues/3051) and doesn't feel natural to use with `.as_value()` everywhere.  The [slog](https://crates.io/crates/slog) crate has similar issues—I've written about both [here](https://josevalerio.com/rust-json-logging).
 
-I built this because the [tracing crate](https://crates.io/crates/tracing)'s `valuable` support has been behind an [unstable feature flag for over three years](https://github.com/tokio-rs/tracing/discussions/1906) and the  [slog](https://crates.io/crates/slog) crate also doesn't seem to provide this..
+If you just want a simple JSON logger, you might find this useful.
 
-If you want a simple JSON logger, this might be useful for you too.
-
-
+## Features
+- Batched, non-blocking writes
+- Graceful shutdown (flushes on exit)
+- Falls back to sync writes if buffer is full
+- Customizable colors, timestamps, batch sizes
+- Works with any `Serialize` type
+- Macros! `debug!()`, `info!()`, `warn!()`, and `error!()`
+- Global context fields that appear in every log message
 
 
  ## Installation
@@ -18,62 +23,43 @@ If you want a simple JSON logger, this might be useful for you too.
  cargo add sjl
  ```
 
- ## Usage
- ```rust
+## Usage
+```rust
 use sjl::{debug, error, info, warn, LogLevel, Logger, RGB};
 use serde::Serialize;
 use serde_json::json;
 
-#[derive(Serialize)]
+#[derive(Serialize)] // This is all you need
 struct User {
     id: u64,
     name: String,
-    verified: bool,
 }
 
 #[derive(Serialize)]
-enum Status {
-    Active,
-    Inactive,
-    RateLimited { retry_after: u32 },
-}
-
-#[derive(Serialize)]
-struct Address {
-    street: String,
-    city: String,
-    country: String,
-}
-
-#[derive(Serialize)]
-struct OrderItem {
-    sku: String,
-    name: String,
-    quantity: u32,
-    price: f64,
-    status: Status,
+enum OrderStatus {
+    Pending,
+    Shipped { tracking_number: String },
+    Delivered,
 }
 
 #[derive(Serialize)]
 struct Order {
-    order_id: String,
     user: User,
-    status: Status,
-    shipping_address: Address,
     items: Vec<OrderItem>,
-    metadata: Metadata,
 }
 
 #[derive(Serialize)]
-struct Metadata {
-    tags: Vec<String>,
-    priority: u8,
-    notes: Option<String>,
+struct OrderItem {
+    name: String,
+    price: f64,
+    quantity: u32,
+    status: OrderStatus,
 }
 
 fn main() {
     // Initialize once at startup
     Logger::init()
+        // Optional config
         .min_level(LogLevel::Debug)       // Minimum log level (default: Debug)
         .batch_size(100)                  // Logs per batch (default: 50)
         .batch_duration_ms(100)           // Max ms before flush (default: 50)
@@ -83,99 +69,64 @@ fn main() {
         .info_color(RGB::new(15, 115, 255))
         .warn_color(RGB::new(247, 155, 35))
         .error_color(RGB::new(255, 0, 0))
-        .build();
+        // Context fields appear in EVERY log message at the top level
+        .context("environment", "production")
+        .context("service", "order-api")
+        .context("metadata", json!({
+            "instance_id": "i-1234567890abcdef0",
+            "pod_name": "order-api-7d4f8c9b5-x8k2p",
+            "git_sha": "abc123f"
+        }))
+        // Call this at the end
+        .build(); 
 
-    // 1. Simple string messages
-    debug!("Application started");
-
-    // 2. String with message context
+    // Strings
+    debug!("App started");
     info!("Server listening", "0.0.0.0:8080");
 
-    // 3. Struct data (works seamlessly)
-    info!(User {
-        id: 1,
-        name: "Alice".into(),
-        verified: true
-    });
+    // Structs
+    info!(User { id: 1, name: "Alice".into() });
+    info!("User authenticated", User { id: 1, name: "Alice".into() });
 
-    // 4. Message + struct data
-    info!("User authenticated", User {
-        id: 1,
-        name: "Alice".into(),
-        verified: true
-    });
+    // Enums (serialize correctly!)
+    warn!(OrderStatus::Pending);
+    warn!(OrderStatus::Shipped { tracking_number: "1Z999AA10123456784".into() });
 
-    // 5. Enum variants serialize correctly
-    warn!(Status::Active);
-    warn!(Status::RateLimited { retry_after: 60 });
-
-    // 6. Ad-hoc JSON without defining structs
+    // Ad-hoc JSON
     error!(json!({
         "error": "connection_failed",
-        "host": "db.example.com",
-        "port": 5432
+        "host": "db.example.com"
     }));
 
-    // 7. Message + ad-hoc JSON
-    error!("Database connection failed", json!({
-        "host": "db.example.com",
-        "port": 5432,
-        "retry_count": 3
-    }));
-
-    // 8. Complex nested: Vec of structs containing enums
-    info!(
-        "Order processed",
-        Order {
-            order_id: "ORD-2024-001".into(),
-            user: User {
-                id: 42,
-                name: "John Doe".into(),
-                verified: true,
+    // Complex: Vec of structs with enums
+    info!("Order processed", Order {
+        user: User { id: 42, name: "John".into() },
+        items: vec![
+            OrderItem {
+                name: "Widget".into(),
+                price: 29.99,
+                quantity: 2,
+                status: OrderStatus::Shipped { tracking_number: "1Z999AA10123456784".into() },
             },
-            status: Status::Active,
-            shipping_address: Address {
-                street: "123 Main St".into(),
-                city: "San Francisco".into(),
-                country: "USA".into(),
+            OrderItem {
+                name: "Gadget".into(),
+                price: 49.99,
+                quantity: 1,
+                status: OrderStatus::Pending,
             },
-            items: vec![
-                OrderItem {
-                    sku: "WIDGET-001".into(),
-                    name: "Premium Widget".into(),
-                    quantity: 2,
-                    price: 29.99,
-                    status: Status::Active,
-                },
-                OrderItem {
-                    sku: "GADGET-002".into(),
-                    name: "Super Gadget".into(),
-                    quantity: 1,
-                    price: 49.99,
-                    status: Status::RateLimited { retry_after: 30 },
-                },
-            ],
-            metadata: Metadata {
-                tags: vec!["express".into(), "gift".into()],
-                priority: 1,
-                notes: Some("Handle with care".into()),
-            },
-        }
-    );
+        ],
+    });
 }
 ```
 
 ### Output
 ```json
-{"level":"DEBUG","timestamp":"2025-10-28T10:14:41.229Z","data":"Application started"}
-{"level":"INFO","timestamp":"2025-10-28T10:14:41.229Z", "message": "Server listening","data":"0.0.0.0:8080"}
-{"level":"INFO","timestamp":"2025-10-28T10:14:41.229Z","data":{"id":1,"name":"Alice","verified":true}}
-{"level":"INFO","timestamp":"2025-10-28T10:14:41.229Z", "message": "User authenticated","data":{"id":1,"name":"Alice","verified":true}}
-{"level":"WARN","timestamp":"2025-10-28T10:14:41.229Z","data":"Active"}
-{"level":"WARN","timestamp":"2025-10-28T10:14:41.229Z","data":{"RateLimited":{"retry_after":60}}}
-{"level":"ERROR","timestamp":"2025-10-28T10:14:41.229Z","data":{"error":"connection_failed","host":"db.example.com","port":5432}}
-{"level":"ERROR","timestamp":"2025-10-28T10:14:41.229Z", "message": "Database connection failed","data":{"host":"db.example.com","port":5432,"retry_count":3}}
-{"level":"INFO","timestamp":"2025-10-28T10:14:41.229Z", "message": "Order processed","data":{"items":[{"name":"Premium Widget","price":29.99,"quantity":2,"sku":"WIDGET-001","status":"Active"},{"name":"Super Gadget","price":49.99,"quantity":1,"sku":"GADGET-002","status":{"RateLimited":{"retry_after":30}}}],"metadata":{"notes":"Handle with care","priority":1,"tags":["express","gift"]},"order_id":"ORD-2024-001","shipping_address":{"city":"San Francisco","country":"USA","street":"123 Main St"},"status":"Active","user":{"id":42,"name":"John Doe","verified":true}}}
+{"level":"DEBUG","timestamp":"2025-10-29T03:00:50.419Z","data":"App started","metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
+{"level":"INFO","timestamp":"2025-10-29T03:00:50.419Z","message":"Server listening","data":"0.0.0.0:8080","metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
+{"level":"INFO","timestamp":"2025-10-29T03:00:50.419Z","data":{"id":1,"name":"Alice"},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
+{"level":"INFO","timestamp":"2025-10-29T03:00:50.419Z","message":"User authenticated","data":{"id":1,"name":"Alice"},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
+{"level":"WARN","timestamp":"2025-10-29T03:00:50.419Z","data":"Pending","metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
+{"level":"WARN","timestamp":"2025-10-29T03:00:50.419Z","data":{"Shipped":{"tracking_number":"1Z999AA10123456784"}},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
+{"level":"ERROR","timestamp":"2025-10-29T03:00:50.419Z","data":{"error":"connection_failed","host":"db.example.com"},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
+{"level":"INFO","timestamp":"2025-10-29T03:00:50.419Z","message":"Order processed","data":{"items":[{"name":"Widget","price":29.99,"quantity":2,"status":{"Shipped":{"tracking_number":"1Z999AA10123456784"}}},{"name":"Gadget","price":49.99,"quantity":1,"status":"Pending"}],"user":{"id":42,"name":"John"}},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
 ```
-
-
