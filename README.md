@@ -108,15 +108,14 @@ fn main() {
 
 ### Output
 ```json
-{"level":"DEBUG","timestamp":"2025-10-28T17:29:17.784Z","data":"Application started"}
-{"level":"INFO","timestamp":"2025-10-28T17:29:17.784Z", "message": "Server listening","data":"0.0.0.0:8080"}
-{"level":"INFO","timestamp":"2025-10-28T17:29:17.784Z","data":{"id":1,"name":"Alice","verified":true}}
-{"level":"INFO","timestamp":"2025-10-28T17:29:17.784Z", "message": "User authenticated","data":{"id":1,"name":"Alice","verified":true}}
-{"level":"WARN","timestamp":"2025-10-28T17:29:17.784Z","data":"Active"}
-{"level":"WARN","timestamp":"2025-10-28T17:29:17.784Z","data":{"RateLimited":{"retry_after":60}}}
-{"level":"ERROR","timestamp":"2025-10-28T17:29:17.784Z","data":{"error":"connection_failed","host":"db.example.com","port":5432}}
-{"level":"ERROR","timestamp":"2025-10-28T17:29:17.784Z", "message": "Database connection failed","data":{"host":"db.example.com","port":5432,"retry_count":3}}
-{"level":"INFO","timestamp":"2025-10-28T17:29:17.784Z", "message": "Order processed","data":{"items":[{"name":"Premium Widget","price":29.99,"quantity":2,"sku":"WIDGET-001","status":"Active"},{"name":"Super Gadget","price":49.99,"quantity":1,"sku":"GADGET-002","status":{"RateLimited":{"retry_after":30}}}],"metadata":{"notes":"Handle with care","priority":1,"tags":["express","gift"]},"order_id":"ORD-2024-001","shipping_address":{"city":"San Francisco","country":"USA","street":"123 Main St"},"status":"Active","user":{"id":42,"name":"John Doe","verified":true}}}
+{"level":"DEBUG","timestamp":"2025-10-29T01:01:02.560Z","data":"App started"}
+{"level":"INFO","timestamp":"2025-10-29T01:01:02.560Z", "message": "Server listening","data":"0.0.0.0:8080"}
+{"level":"INFO","timestamp":"2025-10-29T01:01:02.560Z","data":{"id":1,"name":"Alice"}}
+{"level":"INFO","timestamp":"2025-10-29T01:01:02.560Z", "message": "User authenticated","data":{"id":1,"name":"Alice"}}
+{"level":"WARN","timestamp":"2025-10-29T01:01:02.560Z","data":"Active"}
+{"level":"WARN","timestamp":"2025-10-29T01:01:02.560Z","data":{"RateLimited":{"retry_after":60}}}
+{"level":"ERROR","timestamp":"2025-10-29T01:01:02.560Z","data":{"error":"connection_failed","host":"db.example.com"}}
+{"level":"INFO","timestamp":"2025-10-29T01:01:02.560Z", "message": "Order processed","data":{"items":[{"name":"Widget","price":29.99,"status":"Active"},{"name":"Gadget","price":49.99,"status":{"RateLimited":{"retry_after":30}}}],"user":{"id":42,"name":"John"}}}
 ```
 
 
