@@ -53,7 +53,7 @@ fn main() {
                 "git_sha": "abc123f"
             }),
         )
-        .pretty(true) // Disabled for testing compact mode
+        .pretty(false) // Disabled for testing compact mode
         // Call this at the end
         .build();
 
