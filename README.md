@@ -12,6 +12,7 @@ If you just want a simple JSON logger, you might find this useful.
 - Graceful shutdown (flushes on exit)
 - Falls back to sync writes if buffer is full
 - Customizable colors, timestamps, batch sizes
+- Pretty-printing mode for development
 - Works with any `Serialize` type
 - Macros! `debug!()`, `info!()`, `warn!()`, and `error!()`
 - Global context fields that appear in every log message
@@ -65,6 +66,7 @@ fn main() {
         .batch_duration_ms(100)           // Max ms before flush (default: 50)
         .buffer_size(5000)                // Channel capacity (default: 1024)
         .timestamp_format("%Y-%m-%dT%H:%M:%S%.3fZ")  // ISO 8601 (default)
+        .pretty(true)                     // Pretty-print JSON (default: false)
         .debug_color(RGB::new(38, 45, 56))   // Customize colors
         .info_color(RGB::new(15, 115, 255))
         .warn_color(RGB::new(247, 155, 35))
@@ -119,14 +121,62 @@ fn main() {
 }
 ```
 
-### Output
+### Pretty Mode
+
+When `.pretty(true)` is enabled, logs are formatted with indentation and newlines for easier reading during development:
+
 ```json
-{"level":"DEBUG","timestamp":"2025-10-29T03:00:50.419Z","data":"App started","metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
-{"level":"INFO","timestamp":"2025-10-29T03:00:50.419Z","message":"Server listening","data":"0.0.0.0:8080","metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
-{"level":"INFO","timestamp":"2025-10-29T03:00:50.419Z","data":{"id":1,"name":"Alice"},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
-{"level":"INFO","timestamp":"2025-10-29T03:00:50.419Z","message":"User authenticated","data":{"id":1,"name":"Alice"},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
-{"level":"WARN","timestamp":"2025-10-29T03:00:50.419Z","data":"Pending","metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
-{"level":"WARN","timestamp":"2025-10-29T03:00:50.419Z","data":{"Shipped":{"tracking_number":"1Z999AA10123456784"}},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
-{"level":"ERROR","timestamp":"2025-10-29T03:00:50.419Z","data":{"error":"connection_failed","host":"db.example.com"},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
-{"level":"INFO","timestamp":"2025-10-29T03:00:50.419Z","message":"Order processed","data":{"items":[{"name":"Widget","price":29.99,"quantity":2,"status":{"Shipped":{"tracking_number":"1Z999AA10123456784"}}},{"name":"Gadget","price":49.99,"quantity":1,"status":"Pending"}],"user":{"id":42,"name":"John"}},"metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}, "service": "order-api", "environment": "production"}
+{
+  "data": {
+    "items": [
+      {
+        "name": "Widget",
+        "price": 29.99,
+        "quantity": 2,
+        "status": {
+          "Shipped": {
+            "tracking_number": "1Z999AA10123456784"
+          }
+        }
+      },
+      {
+        "name": "Gadget",
+        "price": 49.99,
+        "quantity": 1,
+        "status": "Pending"
+      }
+    ],
+    "user": {
+      "id": 42,
+      "name": "John"
+    }
+  },
+  "environment": "production",
+  "level": "INFO",
+  "message": "Order processed",
+  "metadata": {
+    "git_sha": "abc123f",
+    "instance_id": "i-1234567890abcdef0",
+    "pod_name": "order-api-7d4f8c9b5-x8k2p"
+  },
+  "service": "order-api",
+  "timestamp": "2025-10-31T01:54:41.972Z"
+}
+```
+
+
+
+### Compact Mode (Default)
+
+With `.pretty(false)` or omitted (default), logs are output as single-line JSON:
+
+```json
+{"level":"DEBUG","timestamp":"2025-10-31T01:57:41.170Z","data":"App started","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","timestamp":"2025-10-31T01:57:41.170Z","message":"Server listening","data":"0.0.0.0:8080","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","timestamp":"2025-10-31T01:57:41.170Z","data":{"id":1,"name":"Alice"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","timestamp":"2025-10-31T01:57:41.170Z","message":"User authenticated","data":{"id":1,"name":"Alice"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"WARN","timestamp":"2025-10-31T01:57:41.170Z","data":"Pending","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"WARN","timestamp":"2025-10-31T01:57:41.170Z","data":{"Shipped":{"tracking_number":"1Z999AA10123456784"}},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"ERROR","timestamp":"2025-10-31T01:57:41.170Z","data":{"error":"connection_failed","host":"db.example.com"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","timestamp":"2025-10-31T01:57:41.170Z","message":"Order processed","data":{"items":[{"name":"Widget","price":29.99,"quantity":2,"status":{"Shipped":{"tracking_number":"1Z999AA10123456784"}}},{"name":"Gadget","price":49.99,"quantity":1,"status":"Pending"}],"user":{"id":42,"name":"John"}},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
 ```

@@ -20,6 +20,7 @@ pub struct LoggerOptions {
     pub(crate) timestamp_format: String,
     pub(crate) color_settings: ColorSettings,
     pub(crate) context: LoggerContext,
+    pub(crate) pretty: bool,
 }
 
 impl LoggerOptions {
@@ -109,6 +110,21 @@ impl LoggerOptions {
         self.context.insert(key_string, value.into());
         self
     }
+
+    /// Enables pretty-printing of JSON output with indentation and newlines.
+    ///
+    /// When enabled, logs will be formatted across multiple lines for easier reading.
+    /// This is useful for development but should typically be disabled in production
+    /// for log aggregation systems that expect one log per line.
+    ///
+    /// Note: Colors will still be applied to the log level, but the output will
+    /// contain ANSI escape codes that may not parse as valid JSON.
+    ///
+    /// Default is `false` (compact, single-line output)
+    pub fn pretty(mut self, pretty: bool) -> Self {
+        self.pretty = pretty;
+        self
+    }
     /// Build and initialize the logger.
     ///
     /// This spawns a background task that handles batching and writing logs.
@@ -133,6 +149,7 @@ impl LoggerOptions {
         let colors = self.color_settings;
         let batch_size = self.batch_size;
         let batch_duration = Duration::from_millis(self.batch_duration_ms);
+        let pretty = self.pretty;
 
         let worker_thread = std::thread::spawn(move || {
             let mut batch = Vec::<LogObject>::with_capacity(batch_size);
@@ -144,7 +161,7 @@ impl LoggerOptions {
                         Ok(log) => {
                             batch.push(log);
                             if batch.len() >= batch_size {
-                                flush_batch(&batch, &timestamp_format, &colors);
+                                flush_batch(&batch, &timestamp_format, &colors, pretty);
                                 batch.clear();
                                 deadline = crossbeam_channel::after(batch_duration);
                             }
@@ -152,7 +169,7 @@ impl LoggerOptions {
                         Err(_) => {
                             // Sender disconnected, flush remaining logs and exit
                             if !batch.is_empty() {
-                                flush_batch(&batch, &timestamp_format, &colors);
+                                flush_batch(&batch, &timestamp_format, &colors, pretty);
                             }
                             break;
                         }
@@ -160,7 +177,7 @@ impl LoggerOptions {
 
                     recv(deadline) -> _ => {
                         if !batch.is_empty() {
-                            flush_batch(&batch, &timestamp_format, &colors);
+                            flush_batch(&batch, &timestamp_format, &colors, pretty);
                             batch.clear();
                         }
                         deadline = crossbeam_channel::after(batch_duration);
@@ -175,14 +192,14 @@ impl LoggerOptions {
                         while let Ok(log) = log_receiver.try_recv() {
                             batch.push(log);
                             if batch.len() >= batch_size {
-                                flush_batch(&batch, &timestamp_format, &colors);
+                                flush_batch(&batch, &timestamp_format, &colors, pretty);
                                 batch.clear();
                             }
                         }
 
                         // Flush final batch
                         if !batch.is_empty() {
-                            flush_batch(&batch, &timestamp_format, &colors);
+                            flush_batch(&batch, &timestamp_format, &colors, pretty);
                         }
                         break;
                     }
@@ -199,6 +216,7 @@ impl LoggerOptions {
             color_settings: colors,
             shutdown_handle,
             context: Arc::new(self.context),
+            pretty: self.pretty,
         };
 
         let logger_ref = match GLOBAL_LOGGER.set(logger) {
