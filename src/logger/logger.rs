@@ -89,6 +89,7 @@ pub struct Logger {
     pub(crate) color_settings: ColorSettings,
     pub(crate) shutdown_handle: Arc<ShutdownHandle>,
     pub(crate) context: Arc<LoggerContext>,
+    pub(crate) pretty: bool,
 }
 
 impl Logger {
@@ -111,6 +112,7 @@ impl Logger {
             timestamp_format: DEFAULT_TIMESTAMP_FORMAT.to_string(),
             color_settings: ColorSettings::default(),
             context: LoggerContext::new(),
+            pretty: false,
         }
     }
 
@@ -149,7 +151,7 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&inline, &self.timestamp_format, &self.color_settings)
+                        format_log_line(&inline, &self.timestamp_format, &self.color_settings, self.pretty)
                     )
                     .ok();
 
@@ -164,7 +166,7 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&warning, &self.timestamp_format, &self.color_settings)
+                        format_log_line(&warning, &self.timestamp_format, &self.color_settings, self.pretty)
                     )
                     .ok();
                 }
@@ -179,7 +181,7 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&inline, &self.timestamp_format, &self.color_settings)
+                        format_log_line(&inline, &self.timestamp_format, &self.color_settings, self.pretty)
                     )
                     .ok();
                 }
