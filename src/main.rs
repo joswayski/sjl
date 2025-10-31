@@ -38,6 +38,7 @@ fn main() {
         .batch_duration_ms(100) // Max ms before flush (default: 50)
         .buffer_size(5000) // Channel capacity (default: 1024)
         .timestamp_format("%Y-%m-%dT%H:%M:%S%.3fZ") // ISO 8601 (default)
+        .pretty(true) // Pretty-print JSON (default: false)
         .debug_color(RGB::new(38, 45, 56)) // Customize colors
         .info_color(RGB::new(15, 115, 255))
         .warn_color(RGB::new(247, 155, 35))
@@ -53,7 +54,6 @@ fn main() {
                 "git_sha": "abc123f"
             }),
         )
-        .pretty(false) // Disabled for testing compact mode
         // Call this at the end
         .build();
 

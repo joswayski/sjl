@@ -88,7 +88,12 @@ pub fn format_log_line(
             output.insert("message".to_string(), Value::String(msg.clone()));
         }
 
-        output.insert("data".to_string(), log.data.clone());
+        // If the "data" passed in is a string, treat it as a message and leave it at the top
+        if log.data.as_str().is_some() && log.message.is_none() {
+            output.insert("message".to_string(), log.data.clone());
+        } else {
+            output.insert("data".to_string(), log.data.clone());
+        }
 
         // Add context fields
         for (k, v) in log.context.iter() {
@@ -135,13 +140,24 @@ pub fn format_log_line(
                 context_part
             )
         } else {
-            format!(
-                r#"{{"level":"{}","timestamp":"{}","data":{}{}}}"#,
-                level_str_colored,
-                log.timestamp.format(timestamp_format),
-                serde_json::to_string(&log.data).unwrap(),
-                context_part
-            )
+            // If the data is actually a string, treat it that way at the top
+            if log.data.as_str().is_some() && log.message.is_none() {
+                format!(
+                    r#"{{"level":"{}","timestamp":"{}","message":"{}"{}}}"#,
+                    level_str_colored,
+                    log.timestamp.format(timestamp_format),
+                    log.data.as_str().unwrap(),
+                    context_part
+                )
+            } else {
+                format!(
+                    r#"{{"level":"{}","timestamp":"{}","data":{}{}}}"#,
+                    level_str_colored,
+                    log.timestamp.format(timestamp_format),
+                    serde_json::to_string(&log.data).unwrap(),
+                    context_part
+                )
+            }
         }
     }
 }
