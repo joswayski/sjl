@@ -5,6 +5,7 @@ use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::constants::DEFAULT_TIMESTAMP_KEY;
 use crate::logger::LoggerContext;
 use crate::{
     colors::ColorSettings,
@@ -18,7 +19,7 @@ use crate::{
 use super::{levels::LogLevel, options::LoggerOptions};
 
 #[derive(Serialize)]
-pub(crate) struct LogObject {
+pub struct LogObject {
     pub(crate) log_level: LogLevel,
     pub(crate) data: Value,
     #[serde(skip)] // Don't serialize directly
@@ -33,13 +34,13 @@ pub(crate) struct LogObject {
 ///
 /// When dropped, this will signal the worker thread to finish processing
 /// any remaining logs and wait for it to complete.
-pub(crate) struct ShutdownHandle {
+pub struct ShutdownHandle {
     shutdown_sender: Mutex<Option<crossbeam_channel::Sender<()>>>,
     worker_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 impl ShutdownHandle {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         shutdown_sender: crossbeam_channel::Sender<()>,
         worker_thread: std::thread::JoinHandle<()>,
     ) -> Self {
@@ -86,6 +87,7 @@ pub struct Logger {
     pub(crate) log_sender: crossbeam_channel::Sender<LogObject>,
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: String,
+    pub(crate) timestamp_key: String,
     pub(crate) color_settings: ColorSettings,
     pub(crate) shutdown_handle: Arc<ShutdownHandle>,
     pub(crate) context: Arc<LoggerContext>,
@@ -103,6 +105,7 @@ impl Logger {
     /// - `.timestamp_format()` - Set timestamp format
     ///
     /// Call `.build()` to create the logger.
+    #[must_use]
     pub fn init() -> LoggerOptions {
         LoggerOptions {
             buffer_size: DEFAULT_BUFFER_SIZE,
@@ -110,6 +113,7 @@ impl Logger {
             batch_duration_ms: DEFAULT_BATCH_DURATION_MS,
             min_level: LogLevel::Debug,
             timestamp_format: DEFAULT_TIMESTAMP_FORMAT.to_string(),
+            timestamp_key: DEFAULT_TIMESTAMP_KEY.to_string(),
             color_settings: ColorSettings::default(),
             context: LoggerContext::new(),
             pretty: false,
@@ -123,7 +127,7 @@ impl Logger {
         let value = match serde_json::to_value(data) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to serialize {}", e);
+                eprintln!("Failed to serialize {e}");
                 return;
             }
         };
@@ -151,7 +155,13 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&inline, &self.timestamp_format, &self.color_settings, self.pretty)
+                        format_log_line(
+                            &inline,
+                            &self.timestamp_format,
+                            &self.timestamp_key,
+                            &self.color_settings,
+                            self.pretty
+                        )
                     )
                     .ok();
 
@@ -166,7 +176,13 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&warning, &self.timestamp_format, &self.color_settings, self.pretty)
+                        format_log_line(
+                            &warning,
+                            &self.timestamp_format,
+                            &self.timestamp_key,
+                            &self.color_settings,
+                            self.pretty
+                        )
                     )
                     .ok();
                 }
@@ -181,7 +197,13 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&inline, &self.timestamp_format, &self.color_settings, self.pretty)
+                        format_log_line(
+                            &inline,
+                            &self.timestamp_format,
+                            &self.timestamp_key,
+                            &self.color_settings,
+                            self.pretty
+                        )
                     )
                     .ok();
                 }
@@ -222,7 +244,7 @@ impl Logger {
         data: &T,
         level: LogLevel,
     ) {
-        let owned_message = message.map(|s| s.to_string());
-        self.log(owned_message, data, level)
+        let owned_message = message.map(std::string::ToString::to_string);
+        self.log(owned_message, data, level);
     }
 }

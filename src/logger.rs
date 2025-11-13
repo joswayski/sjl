@@ -1,11 +1,11 @@
-pub(crate) mod context;
+pub mod context;
+mod core;
 mod levels;
-mod logger;
-pub(crate) mod options;
+pub mod options;
 
+pub use core::Logger;
 pub use levels::LogLevel;
-pub use logger::Logger;
 pub use options::LoggerOptions;
 
-pub(crate) use context::LoggerContext;
-pub(crate) use logger::LogObject;
+pub use context::LoggerContext;
+pub use core::LogObject;
