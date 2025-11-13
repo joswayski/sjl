@@ -1,4 +1,10 @@
-#![warn(clippy::all, clippy::pedantic, clippy::nursery)]
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction)]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    clippy::arbitrary_source_item_ordering,
+    clippy::allow_attributes_without_reason,
+    clippy::blanket_clippy_restriction_lints
+)]
 use serde::Serialize;
 use serde_json::json;
 use sjl::{LogLevel, Logger, RGB, debug, error, info, warn};
