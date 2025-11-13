@@ -140,22 +140,32 @@ impl LoggerOptions {
     fn validate(&self) {
         assert!(
             !RESERVED_FIELD_NAMES.contains(&self.timestamp_key.as_ref()),
-            "Cannot use {} as the timestamp key - it's a reserved field name. Reserved fields: {}",
+            "\n\nCannot use '{}' as the timestamp key - it's a reserved field name along with {}",
             &self.timestamp_key,
-            RESERVED_FIELD_NAMES.join(", ")
+            RESERVED_FIELD_NAMES
+                .iter()
+                .filter(|v| *v != &self.timestamp_key)
+                .map(|v| format!("'{v}'"))
+                .collect::<Vec<_>>()
+                .join(", ")
         );
 
         for (key, _value) in &self.context {
             assert!(
                 !RESERVED_FIELD_NAMES.contains(&key.as_str()),
-                "Cannot use {} as a context key - it's a reserved field name. Reserved fields: {}",
+                "\n\nCannot use '{}' as a context key - it's a reserved field name along with '{}",
                 key,
-                RESERVED_FIELD_NAMES.join(", ")
+                RESERVED_FIELD_NAMES
+                    .iter()
+                    .filter(|v| *v != &key)
+                    .map(|v| format!("'{v}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
 
             assert!(
                 key != &self.timestamp_key,
-                "Cannot use {key} as a context key as it is set as the timestamp key. Either rename the timestamp key with .timestamp_key(new_value) or rename your context key"
+                "\n\nCannot use '{key}' as a context key as it is set as the timestamp key. Either rename the timestamp key from '{key}' to something else with .timestamp_key(new_value) or rename your context key"
             );
         }
     }
