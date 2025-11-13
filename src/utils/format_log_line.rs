@@ -1,7 +1,6 @@
-use crate::{LogLevel, colors::ColorSettings, logger::LogObject};
+use crate::{colors::ColorSettings, logger::LogObject};
 use hashbrown::HashMap;
 use is_terminal::IsTerminal;
-use owo_colors::OwoColorize;
 use serde::{self, Serialize};
 use serde_json::Value;
 use std::io::stderr;
@@ -21,7 +20,7 @@ pub struct LogOutput<'a> {
 pub fn format_log_line(
     log: &LogObject,
     timestamp_format: &str,
-    colors_settings: &ColorSettings,
+    color_settings: &ColorSettings,
     pretty: bool,
 ) -> String {
     let level_as_str = log.log_level.as_str();
@@ -30,38 +29,7 @@ pub fn format_log_line(
     let is_tty = stderr().is_terminal();
 
     let level_str_colored = if is_tty {
-        match log.log_level {
-            LogLevel::Debug => "DEBUG"
-                .truecolor(
-                    colors_settings.debug.red,
-                    colors_settings.debug.green,
-                    colors_settings.debug.blue,
-                )
-                .to_string(),
-            LogLevel::Info => "INFO"
-                .truecolor(
-                    colors_settings.info.red,
-                    colors_settings.info.green,
-                    colors_settings.info.blue,
-                )
-                .to_string(),
-
-            LogLevel::Warn => "WARN"
-                .truecolor(
-                    colors_settings.warn.red,
-                    colors_settings.warn.green,
-                    colors_settings.warn.blue,
-                )
-                .to_string(),
-
-            LogLevel::Error => "ERROR"
-                .truecolor(
-                    colors_settings.error.red,
-                    colors_settings.error.green,
-                    colors_settings.error.blue,
-                )
-                .to_string(),
-        }
+        log.log_level.get_colored_string(color_settings)
     } else {
         // No TTY, use plain text (valid JSON)
         level_as_str.to_string()
