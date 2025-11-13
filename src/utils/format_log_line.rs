@@ -90,34 +90,40 @@ pub fn format_log_line(
             format!(",{context_fields}")
         };
 
-        if let Some(msg) = &log.message {
-            format!(
-                r#"{{"level":"{}","timestamp":"{}","message":"{}","data":{}{}}}"#,
-                level_str_colored,
-                log.timestamp.format(timestamp_format),
-                msg,
-                serde_json::to_string(&log.data).unwrap(),
-                context_part
-            )
-        } else {
-            // If the data is actually a string, treat it that way at the top
-            if log.data.as_str().is_some() && log.message.is_none() {
+        log.message.as_ref().map_or_else(
+            // when log.message is None
+            || {
+                if log.data.as_str().is_some() {
+                    // No message, data is a string -> use data as the message field
+                    format!(
+                        r#"{{"level":"{}","timestamp":"{}","message":"{}"{}}}"#,
+                        level_str_colored,
+                        log.timestamp.format(timestamp_format),
+                        log.data.as_str().unwrap(),
+                        context_part
+                    )
+                } else {
+                    // No message, data is not a string -> output data field
+                    format!(
+                        r#"{{"level":"{}","timestamp":"{}","data":{}{}}}"#,
+                        level_str_colored,
+                        log.timestamp.format(timestamp_format),
+                        serde_json::to_string(&log.data).unwrap(),
+                        context_part
+                    )
+                }
+            },
+            // Message exists -> output both message and data fields
+            |msg| {
                 format!(
-                    r#"{{"level":"{}","timestamp":"{}","message":"{}"{}}}"#,
+                    r#"{{"level":"{}","timestamp":"{}","message":"{}","data":{}{}}}"#,
                     level_str_colored,
                     log.timestamp.format(timestamp_format),
-                    log.data.as_str().unwrap(),
-                    context_part
-                )
-            } else {
-                format!(
-                    r#"{{"level":"{}","timestamp":"{}","data":{}{}}}"#,
-                    level_str_colored,
-                    log.timestamp.format(timestamp_format),
+                    msg,
                     serde_json::to_string(&log.data).unwrap(),
                     context_part
                 )
-            }
-        }
+            },
+        )
     }
 }
