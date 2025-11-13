@@ -2,7 +2,7 @@ use std::sync::OnceLock;
 
 use crate::Logger;
 
-pub(crate) static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
+pub static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
 
 #[doc(hidden)]
 pub fn get_global_logger() -> &'static Logger {
@@ -13,7 +13,7 @@ pub fn get_global_logger() -> &'static Logger {
 
 /// Trigger shutdown of the global logger.
 /// This is automatically called at program exit via an atexit handler.
-pub(crate) fn shutdown_global_logger() {
+pub fn shutdown_global_logger() {
     if let Some(logger) = GLOBAL_LOGGER.get() {
         logger.shutdown_handle.shutdown();
     }

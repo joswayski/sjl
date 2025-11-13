@@ -18,7 +18,7 @@ use crate::{
 use super::{levels::LogLevel, options::LoggerOptions};
 
 #[derive(Serialize)]
-pub(crate) struct LogObject {
+pub struct LogObject {
     pub(crate) log_level: LogLevel,
     pub(crate) data: Value,
     #[serde(skip)] // Don't serialize directly
@@ -33,13 +33,13 @@ pub(crate) struct LogObject {
 ///
 /// When dropped, this will signal the worker thread to finish processing
 /// any remaining logs and wait for it to complete.
-pub(crate) struct ShutdownHandle {
+pub struct ShutdownHandle {
     shutdown_sender: Mutex<Option<crossbeam_channel::Sender<()>>>,
     worker_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 impl ShutdownHandle {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         shutdown_sender: crossbeam_channel::Sender<()>,
         worker_thread: std::thread::JoinHandle<()>,
     ) -> Self {
@@ -103,6 +103,7 @@ impl Logger {
     /// - `.timestamp_format()` - Set timestamp format
     ///
     /// Call `.build()` to create the logger.
+    #[must_use]
     pub fn init() -> LoggerOptions {
         LoggerOptions {
             buffer_size: DEFAULT_BUFFER_SIZE,
@@ -123,7 +124,7 @@ impl Logger {
         let value = match serde_json::to_value(data) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to serialize {}", e);
+                eprintln!("Failed to serialize {e}");
                 return;
             }
         };
@@ -151,7 +152,12 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&inline, &self.timestamp_format, &self.color_settings, self.pretty)
+                        format_log_line(
+                            &inline,
+                            &self.timestamp_format,
+                            &self.color_settings,
+                            self.pretty
+                        )
                     )
                     .ok();
 
@@ -166,7 +172,12 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&warning, &self.timestamp_format, &self.color_settings, self.pretty)
+                        format_log_line(
+                            &warning,
+                            &self.timestamp_format,
+                            &self.color_settings,
+                            self.pretty
+                        )
                     )
                     .ok();
                 }
@@ -181,7 +192,12 @@ impl Logger {
                     writeln!(
                         stderr,
                         "{}",
-                        format_log_line(&inline, &self.timestamp_format, &self.color_settings, self.pretty)
+                        format_log_line(
+                            &inline,
+                            &self.timestamp_format,
+                            &self.color_settings,
+                            self.pretty
+                        )
                     )
                     .ok();
                 }
@@ -222,7 +238,7 @@ impl Logger {
         data: &T,
         level: LogLevel,
     ) {
-        let owned_message = message.map(|s| s.to_string());
-        self.log(owned_message, data, level)
+        let owned_message = message.map(std::string::ToString::to_string);
+        self.log(owned_message, data, level);
     }
 }

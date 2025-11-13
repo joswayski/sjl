@@ -6,8 +6,7 @@ use serde::{self, Serialize};
 use serde_json::Value;
 use std::io::stderr;
 
-pub(crate) const RESERVED_FIELD_NAMES: [&str; 5] =
-    ["level", "timestamp", "context", "message", "data"];
+pub const RESERVED_FIELD_NAMES: [&str; 5] = ["level", "timestamp", "context", "message", "data"];
 
 #[derive(Serialize)]
 pub struct LogOutput<'a> {
@@ -108,8 +107,8 @@ pub fn format_log_line(
         // but it displays correctly in terminals and remains valid JSON for log aggregators
         if is_tty {
             pretty_json.replace(
-                &format!(r#""level": "{}""#, level_str_plain),
-                &format!(r#""level": "{}""#, level_str_colored),
+                &format!(r#""level": "{level_str_plain}""#),
+                &format!(r#""level": "{level_str_colored}""#),
             )
         } else {
             pretty_json
@@ -127,7 +126,7 @@ pub fn format_log_line(
         let context_part = if context_fields.is_empty() {
             String::new()
         } else {
-            format!(",{}", context_fields)
+            format!(",{context_fields}")
         };
 
         if let Some(msg) = &log.message {

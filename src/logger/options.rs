@@ -5,9 +5,11 @@ use crate::{
     LogLevel, Logger, RGB,
     colors::ColorSettings,
     globals::GLOBAL_LOGGER,
-    logger::{LogObject, LoggerContext, logger::ShutdownHandle},
+    logger::{LogObject, LoggerContext},
     utils::{RESERVED_FIELD_NAMES, flush_batch},
 };
+
+use super::core::ShutdownHandle;
 
 /// Builder for configuring a [`Logger`] instance.
 ///
@@ -29,7 +31,8 @@ impl LoggerOptions {
     /// Example: [`LogLevel::Info`] will skip Debug logs and show Info, Warning, and Error only
     ///
     /// Default is [`LogLevel::Debug`]
-    pub fn min_level(mut self, log_level: LogLevel) -> Self {
+    #[must_use]
+    pub const fn min_level(mut self, log_level: LogLevel) -> Self {
         self.min_level = log_level;
         self
     }
@@ -39,7 +42,8 @@ impl LoggerOptions {
     ///
     /// Default is [`DEFAULT_BUFFER_SIZE`] - 1024
     ///
-    pub fn buffer_size(mut self, buffer_size: usize) -> Self {
+    #[must_use]
+    pub const fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
         self
     }
@@ -47,7 +51,8 @@ impl LoggerOptions {
     /// How many log messages to batch
     ///
     /// Default is [`DEFAULT_BATCH_SIZE`] - 50
-    pub fn batch_size(mut self, batch_size: usize) -> Self {
+    #[must_use]
+    pub const fn batch_size(mut self, batch_size: usize) -> Self {
         self.batch_size = batch_size;
         self
     }
@@ -55,7 +60,8 @@ impl LoggerOptions {
     /// For how long to batch messages for
     ///
     /// Default is [`DEFAULT_BATCH_DURATION_MS`] - 50ms
-    pub fn batch_duration_ms(mut self, batch_duration_ms: u64) -> Self {
+    #[must_use]
+    pub const fn batch_duration_ms(mut self, batch_duration_ms: u64) -> Self {
         self.batch_duration_ms = batch_duration_ms;
         self
     }
@@ -63,37 +69,45 @@ impl LoggerOptions {
     /// Formats the combined date and time per the specified format string.
     /// See the [chrono::format::strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) module for the supported escape sequences.
     /// Default is [`DEFAULT_TIMESTAMP_FORMAT`] - "%Y-%m-%dT%H:%M:%S%.3fZ" which outputs: 2025-10-26T22:04:29.412Z
+    #[must_use]
     pub fn timestamp_format(mut self, timestamp_format: impl Into<String>) -> Self {
         self.timestamp_format = timestamp_format.into();
         self
     }
 
     /// Sets the debug color using [`RGB`]
-    pub fn debug_color(mut self, color: RGB) -> Self {
+    #[must_use]
+    pub const fn debug_color(mut self, color: RGB) -> Self {
         self.color_settings.debug = color;
         self
     }
 
     /// Sets the info color using [`RGB`]
-    pub fn info_color(mut self, color: RGB) -> Self {
+    #[must_use]
+    pub const fn info_color(mut self, color: RGB) -> Self {
         self.color_settings.info = color;
         self
     }
 
     /// Sets the warn color using [`RGB`]
-    pub fn warn_color(mut self, color: RGB) -> Self {
+    #[must_use]
+    pub const fn warn_color(mut self, color: RGB) -> Self {
         self.color_settings.warn = color;
         self
     }
 
     /// Sets the error color using [`RGB`]
-    pub fn error_color(mut self, color: RGB) -> Self {
+    #[must_use]
+    pub const fn error_color(mut self, color: RGB) -> Self {
         self.color_settings.error = color;
         self
     }
 
     /// Sets global context for every log message
     /// For example, environment or service-name
+    /// # Panics
+    /// Panics if using a reserved field name. See [`RESERVED_FIELD_NAMES`]
+    #[must_use]
     pub fn context(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         let key_string = key.into();
 
@@ -121,7 +135,8 @@ impl LoggerOptions {
     /// contain ANSI escape codes that may not parse as valid JSON.
     ///
     /// Default is `false` (compact, single-line output)
-    pub fn pretty(mut self, pretty: bool) -> Self {
+    #[must_use]
+    pub const fn pretty(mut self, pretty: bool) -> Self {
         self.pretty = pretty;
         self
     }
@@ -132,13 +147,15 @@ impl LoggerOptions {
     ///
     /// When the program exits, the logger will automatically flush all remaining
     /// logs before shutting down.
-    pub fn build(self) -> &'static Logger {
+    ///
+    /// # Panics
+    /// Actually does not as we just set the logger. This shouldn't happen.
+    pub fn build(self) {
         // If already initialized, return it
-        if let Some(logger) = GLOBAL_LOGGER.get() {
+        if GLOBAL_LOGGER.get().is_some() {
             eprintln!(
                 "WARNING - LOGGER ALREADY INITIALIZED! ANY NEW SETTINGS WILL NOT BE APPLIED."
             );
-            return logger;
         }
 
         let (log_sender, log_receiver) = crossbeam_channel::bounded::<LogObject>(self.buffer_size);
@@ -157,8 +174,7 @@ impl LoggerOptions {
 
             loop {
                 crossbeam_channel::select! {
-                    recv(log_receiver) -> msg => match msg {
-                        Ok(log) => {
+                    recv(log_receiver) -> msg => if let Ok(log) = msg {
                             batch.push(log);
                             if batch.len() >= batch_size {
                                 flush_batch(&batch, &timestamp_format, &colors, pretty);
@@ -166,15 +182,13 @@ impl LoggerOptions {
                                 deadline = crossbeam_channel::after(batch_duration);
                             }
                         }
-                        Err(_) => {
+                        else {
                             // Sender disconnected, flush remaining logs and exit
                             if !batch.is_empty() {
                                 flush_batch(&batch, &timestamp_format, &colors, pretty);
                             }
                             break;
-                        }
-                    },
-
+                        },
                     recv(deadline) -> _ => {
                         if !batch.is_empty() {
                             flush_batch(&batch, &timestamp_format, &colors, pretty);
@@ -219,8 +233,8 @@ impl LoggerOptions {
             pretty: self.pretty,
         };
 
-        let logger_ref = match GLOBAL_LOGGER.set(logger) {
-            Ok(_) => {
+        match GLOBAL_LOGGER.set(logger) {
+            Ok(()) => {
                 // Register atexit handler to ensure logs are flushed on shutdown
                 extern "C" fn shutdown_handler() {
                     crate::globals::shutdown_global_logger();
@@ -228,12 +242,12 @@ impl LoggerOptions {
                 unsafe {
                     libc::atexit(shutdown_handler);
                 }
-                GLOBAL_LOGGER.get().unwrap()
+                GLOBAL_LOGGER
+                    .get()
+                    .expect("Logger to be there, but it wasn't.")
             }
             // Incase of a race condition, return the existing one
             Err(_) => GLOBAL_LOGGER.get().unwrap(),
         };
-
-        logger_ref
     }
 }

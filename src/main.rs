@@ -1,3 +1,4 @@
+#![warn(clippy::all, clippy::pedantic, clippy::nursery)]
 use serde::Serialize;
 use serde_json::json;
 use sjl::{LogLevel, Logger, RGB, debug, error, info, warn};
@@ -12,7 +13,6 @@ struct User {
 enum OrderStatus {
     Pending,
     Shipped { tracking_number: String },
-    Delivered,
 }
 
 #[derive(Serialize)]
