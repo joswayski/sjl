@@ -9,3 +9,6 @@ pub const DEFAULT_BATCH_DURATION_MS: u64 = 50;
 
 /// Default format for timestamps: 2025-10-23T15:30:45.123Z
 pub const DEFAULT_TIMESTAMP_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.3fZ";
+
+/// Default key name for timestamps. Default is `timestamp`
+pub const DEFAULT_TIMESTAMP_KEY: &str = "timestamp";

@@ -5,7 +5,8 @@ use serde::{self, Serialize};
 use serde_json::Value;
 use std::io::stderr;
 
-pub const RESERVED_FIELD_NAMES: [&str; 5] = ["level", "timestamp", "context", "message", "data"];
+// Note: timestamp is not on here as it can be overridden
+pub const RESERVED_FIELD_NAMES: [&str; 4] = ["level", "context", "message", "data"];
 
 #[derive(Serialize)]
 pub struct LogOutput<'a> {
@@ -20,6 +21,7 @@ pub struct LogOutput<'a> {
 pub fn format_log_line(
     log: &LogObject,
     timestamp_format: &str,
+    timestamp_key: &str,
     color_settings: &ColorSettings,
     pretty: bool,
 ) -> String {
@@ -40,7 +42,7 @@ pub fn format_log_line(
         let mut output = serde_json::Map::new();
         output.insert("level".to_string(), Value::String(level_as_str.to_string()));
         output.insert(
-            "timestamp".to_string(),
+            timestamp_key.to_string(),
             Value::String(log.timestamp.format(timestamp_format).to_string()),
         );
 
@@ -96,8 +98,9 @@ pub fn format_log_line(
                 if log.data.as_str().is_some() {
                     // No message, data is a string -> use data as the message field
                     format!(
-                        r#"{{"level":"{}","timestamp":"{}","message":"{}"{}}}"#,
+                        r#"{{"level":"{}","{}":"{}","message":"{}"{}}}"#,
                         level_str_colored,
+                        timestamp_key,
                         log.timestamp.format(timestamp_format),
                         log.data.as_str().unwrap(),
                         context_part
@@ -105,8 +108,9 @@ pub fn format_log_line(
                 } else {
                     // No message, data is not a string -> output data field
                     format!(
-                        r#"{{"level":"{}","timestamp":"{}","data":{}{}}}"#,
+                        r#"{{"level":"{}","{}":"{}","data":{}{}}}"#,
                         level_str_colored,
+                        timestamp_key,
                         log.timestamp.format(timestamp_format),
                         serde_json::to_string(&log.data).unwrap(),
                         context_part
@@ -116,8 +120,9 @@ pub fn format_log_line(
             // Message exists -> output both message and data fields
             |msg| {
                 format!(
-                    r#"{{"level":"{}","timestamp":"{}","message":"{}","data":{}{}}}"#,
+                    r#"{{"level":"{}","{}":"{}","message":"{}","data":{}{}}}"#,
                     level_str_colored,
+                    timestamp_key,
                     log.timestamp.format(timestamp_format),
                     msg,
                     serde_json::to_string(&log.data).unwrap(),

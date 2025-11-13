@@ -66,6 +66,7 @@ fn main() {
         .batch_duration_ms(100)           // Max ms before flush (default: 50)
         .buffer_size(5000)                // Channel capacity (default: 1024)
         .timestamp_format("%Y-%m-%dT%H:%M:%S%.3fZ")  // ISO 8601 (default)
+        .timestamp_key("tz")              // Rename this field if you want (default: timestamp)
         .pretty(true)                     // Pretty-print JSON (default: false)
         .debug_color(RGB::new(38, 45, 56))   // Customize colors
         .info_color(RGB::new(15, 115, 255))
@@ -160,7 +161,7 @@ When `.pretty(true)` is enabled, logs are formatted with indentation and newline
     "pod_name": "order-api-7d4f8c9b5-x8k2p"
   },
   "service": "order-api",
-  "timestamp": "2025-10-31T07:33:05.627Z"
+  "tz": "2025-10-31T07:33:05.627Z"
 }
 ```
 
@@ -171,11 +172,11 @@ When `.pretty(true)` is enabled, logs are formatted with indentation and newline
 With `.pretty(false)` or omitted (default), logs are output as single-line JSON:
 
 ```json
-{"level":"DEBUG","timestamp":"2025-10-31T07:33:44.333Z","message":"App started","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
-{"level":"INFO","timestamp":"2025-10-31T07:33:44.333Z","message":"Server listening","data":"0.0.0.0:8080","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
-{"level":"INFO","timestamp":"2025-10-31T07:33:44.333Z","data":{"id":1,"name":"Alice"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
-{"level":"INFO","timestamp":"2025-10-31T07:33:44.333Z","message":"User authenticated","data":{"id":1,"name":"Alice"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
-{"level":"WARN","timestamp":"2025-10-31T07:33:44.333Z","message":"Pending","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
-{"level":"WARN","timestamp":"2025-10-31T07:33:44.333Z","data":{"Shipped":{"tracking_number":"1Z999AA10123456784"}},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
-{"level":"ERROR","timestamp":"2025-10-31T07:33:44.333Z","data":{"error":"connection_failed","host":"db.example.com"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"DEBUG","tz":"2025-10-31T07:33:44.333Z","message":"App started","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","tz":"2025-10-31T07:33:44.333Z","message":"Server listening","data":"0.0.0.0:8080","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","tz":"2025-10-31T07:33:44.333Z","data":{"id":1,"name":"Alice"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"INFO","tz":"2025-10-31T07:33:44.333Z","message":"User authenticated","data":{"id":1,"name":"Alice"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"WARN","tz":"2025-10-31T07:33:44.333Z","message":"Pending","environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"WARN","tz":"2025-10-31T07:33:44.333Z","data":{"Shipped":{"tracking_number":"1Z999AA10123456784"}},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
+{"level":"ERROR","tz":"2025-10-31T07:33:44.333Z","data":{"error":"connection_failed","host":"db.example.com"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
 ```

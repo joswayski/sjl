@@ -5,6 +5,7 @@ use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::constants::DEFAULT_TIMESTAMP_KEY;
 use crate::logger::LoggerContext;
 use crate::{
     colors::ColorSettings,
@@ -86,6 +87,7 @@ pub struct Logger {
     pub(crate) log_sender: crossbeam_channel::Sender<LogObject>,
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: String,
+    pub(crate) timestamp_key: String,
     pub(crate) color_settings: ColorSettings,
     pub(crate) shutdown_handle: Arc<ShutdownHandle>,
     pub(crate) context: Arc<LoggerContext>,
@@ -111,6 +113,7 @@ impl Logger {
             batch_duration_ms: DEFAULT_BATCH_DURATION_MS,
             min_level: LogLevel::Debug,
             timestamp_format: DEFAULT_TIMESTAMP_FORMAT.to_string(),
+            timestamp_key: DEFAULT_TIMESTAMP_KEY.to_string(),
             color_settings: ColorSettings::default(),
             context: LoggerContext::new(),
             pretty: false,
@@ -155,6 +158,7 @@ impl Logger {
                         format_log_line(
                             &inline,
                             &self.timestamp_format,
+                            &self.timestamp_key,
                             &self.color_settings,
                             self.pretty
                         )
@@ -175,6 +179,7 @@ impl Logger {
                         format_log_line(
                             &warning,
                             &self.timestamp_format,
+                            &self.timestamp_key,
                             &self.color_settings,
                             self.pretty
                         )
@@ -195,6 +200,7 @@ impl Logger {
                         format_log_line(
                             &inline,
                             &self.timestamp_format,
+                            &self.timestamp_key,
                             &self.color_settings,
                             self.pretty
                         )

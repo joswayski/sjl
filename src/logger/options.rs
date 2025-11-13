@@ -20,6 +20,7 @@ pub struct LoggerOptions {
     pub(crate) batch_duration_ms: u64,
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: String,
+    pub(crate) timestamp_key: String,
     pub(crate) color_settings: ColorSettings,
     pub(crate) context: LoggerContext,
     pub(crate) pretty: bool,
@@ -75,6 +76,13 @@ impl LoggerOptions {
         self
     }
 
+    /// Allows changing the name of the `timestamp` default key name to something like `tz`
+    #[must_use]
+    pub fn timestamp_key(mut self, timestamp_key: impl Into<String>) -> Self {
+        self.timestamp_key = timestamp_key.into();
+        self
+    }
+
     /// Sets the debug color using [`RGB`]
     #[must_use]
     pub const fn debug_color(mut self, color: RGB) -> Self {
@@ -109,19 +117,7 @@ impl LoggerOptions {
     /// Panics if using a reserved field name. See [`RESERVED_FIELD_NAMES`]
     #[must_use]
     pub fn context(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
-        let key_string = key.into();
-
-        match key_string.as_str() {
-            "level" | "timestamp" | "context" | "data" | "message" => {
-                panic!(
-                    "Cannot use {} as a context key - it's a reservd field name. Reserved fields: {}",
-                    key_string,
-                    RESERVED_FIELD_NAMES.join(", ")
-                )
-            }
-            _ => {}
-        }
-        self.context.insert(key_string, value.into());
+        self.context.insert(key.into(), value.into());
         self
     }
 
@@ -140,6 +136,29 @@ impl LoggerOptions {
         self.pretty = pretty;
         self
     }
+
+    fn validate(&self) {
+        assert!(
+            !RESERVED_FIELD_NAMES.contains(&self.timestamp_key.as_ref()),
+            "Cannot use {} as the timestamp key - it's a reserved field name. Reserved fields: {}",
+            &self.timestamp_key,
+            RESERVED_FIELD_NAMES.join(", ")
+        );
+
+        for (key, _value) in &self.context {
+            assert!(
+                !RESERVED_FIELD_NAMES.contains(&key.as_str()),
+                "Cannot use {} as a context key - it's a reserved field name. Reserved fields: {}",
+                key,
+                RESERVED_FIELD_NAMES.join(", ")
+            );
+
+            assert!(
+                key != &self.timestamp_key,
+                "Cannot use {key} as a context key as it is set as the timestamp key. Either rename the timestamp key with .timestamp_key(new_value) or rename your context key"
+            );
+        }
+    }
     /// Build and initialize the logger.
     ///
     /// This spawns a background task that handles batching and writing logs.
@@ -156,13 +175,18 @@ impl LoggerOptions {
             eprintln!(
                 "WARNING - LOGGER ALREADY INITIALIZED! ANY NEW SETTINGS WILL NOT BE APPLIED."
             );
+            return;
         }
+
+        // Do some final validation checks
+        self.validate();
 
         let (log_sender, log_receiver) = crossbeam_channel::bounded::<LogObject>(self.buffer_size);
         let (shutdown_sender, shutdown_receiver) = crossbeam_channel::bounded::<()>(1);
 
         // Move configuration into the worker thread
         let timestamp_format = self.timestamp_format.clone();
+        let timestamp_key = self.timestamp_key.clone();
         let colors = self.color_settings;
         let batch_size = self.batch_size;
         let batch_duration = Duration::from_millis(self.batch_duration_ms);
@@ -177,7 +201,7 @@ impl LoggerOptions {
                     recv(log_receiver) -> msg => if let Ok(log) = msg {
                             batch.push(log);
                             if batch.len() >= batch_size {
-                                flush_batch(&batch, &timestamp_format, &colors, pretty);
+                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
                                 batch.clear();
                                 deadline = crossbeam_channel::after(batch_duration);
                             }
@@ -185,13 +209,13 @@ impl LoggerOptions {
                         else {
                             // Sender disconnected, flush remaining logs and exit
                             if !batch.is_empty() {
-                                flush_batch(&batch, &timestamp_format, &colors, pretty);
+                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
                             }
                             break;
                         },
                     recv(deadline) -> _ => {
                         if !batch.is_empty() {
-                            flush_batch(&batch, &timestamp_format, &colors, pretty);
+                            flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
                             batch.clear();
                         }
                         deadline = crossbeam_channel::after(batch_duration);
@@ -206,14 +230,14 @@ impl LoggerOptions {
                         while let Ok(log) = log_receiver.try_recv() {
                             batch.push(log);
                             if batch.len() >= batch_size {
-                                flush_batch(&batch, &timestamp_format, &colors, pretty);
+                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
                                 batch.clear();
                             }
                         }
 
                         // Flush final batch
                         if !batch.is_empty() {
-                            flush_batch(&batch, &timestamp_format, &colors, pretty);
+                            flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
                         }
                         break;
                     }
@@ -227,6 +251,7 @@ impl LoggerOptions {
             log_sender,
             min_level: self.min_level,
             timestamp_format: self.timestamp_format,
+            timestamp_key: self.timestamp_key,
             color_settings: colors,
             shutdown_handle,
             context: Arc::new(self.context),
