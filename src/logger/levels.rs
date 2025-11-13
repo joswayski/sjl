@@ -16,3 +16,14 @@ pub enum LogLevel {
     /// Error messages - highest severity
     Error = 3,
 }
+
+impl LogLevel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LogLevel::Debug => "DEBUG",
+            LogLevel::Error => "ERROR",
+            LogLevel::Info => "INFO",
+            LogLevel::Warn => "WARN",
+        }
+    }
+}

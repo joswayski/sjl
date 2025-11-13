@@ -24,13 +24,7 @@ pub fn format_log_line(
     colors_settings: &ColorSettings,
     pretty: bool,
 ) -> String {
-    let level_str_plain = match log.log_level {
-        LogLevel::Debug => "DEBUG",
-        LogLevel::Info => "INFO",
-        LogLevel::Warn => "WARN",
-        LogLevel::Error => "ERROR",
-    };
-
+    let level_as_str = log.log_level.as_str();
     // Only apply colors if stderr is connected to a terminal (TTY)
     // This prevents ANSI codes from breaking JSON parsing in log aggregators
     let is_tty = stderr().is_terminal();
@@ -51,6 +45,7 @@ pub fn format_log_line(
                     colors_settings.info.blue,
                 )
                 .to_string(),
+
             LogLevel::Warn => "WARN"
                 .truecolor(
                     colors_settings.warn.red,
@@ -58,6 +53,7 @@ pub fn format_log_line(
                     colors_settings.warn.blue,
                 )
                 .to_string(),
+
             LogLevel::Error => "ERROR"
                 .truecolor(
                     colors_settings.error.red,
@@ -68,16 +64,13 @@ pub fn format_log_line(
         }
     } else {
         // No TTY, use plain text (valid JSON)
-        level_str_plain.to_string()
+        level_as_str.to_string()
     };
 
     if pretty {
         // Build a complete JSON object and use serde_json's pretty printer
         let mut output = serde_json::Map::new();
-        output.insert(
-            "level".to_string(),
-            Value::String(level_str_plain.to_string()),
-        );
+        output.insert("level".to_string(), Value::String(level_as_str.to_string()));
         output.insert(
             "timestamp".to_string(),
             Value::String(log.timestamp.format(timestamp_format).to_string()),
@@ -107,7 +100,7 @@ pub fn format_log_line(
         // but it displays correctly in terminals and remains valid JSON for log aggregators
         if is_tty {
             pretty_json.replace(
-                &format!(r#""level": "{level_str_plain}""#),
+                &format!(r#""level": "{level_as_str}""#),
                 &format!(r#""level": "{level_str_colored}""#),
             )
         } else {
