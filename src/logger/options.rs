@@ -157,7 +157,7 @@ impl LoggerOptions {
                 key,
                 RESERVED_FIELD_NAMES
                     .iter()
-                    .filter(|v| *v != &key)
+                    .filter(|v| *v != key)
                     .map(|v| format!("'{v}'"))
                     .collect::<Vec<_>>()
                     .join(", ")
