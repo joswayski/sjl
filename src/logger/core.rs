@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::{Write, stderr};
 use std::sync::{Arc, Mutex};
 
@@ -127,11 +128,9 @@ impl Logger {
         }
     }
 
-    fn log<T: Serialize>(&self, message: Option<String>, data: &T, log_level: LogLevel) {
-        if log_level < self.min_level {
-            return;
-        }
+    fn log<T: Serialize>(&self, message: Option<Cow<'static, str>>, data: &T, log_level: LogLevel) {
         let value = match serde_json::to_value(data) {
+            // Yes i know we're not checking if it's already a Value type so we're paying the cost here
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to serialize {e}");
@@ -142,7 +141,7 @@ impl Logger {
         let log_object = LogObject {
             log_level,
             data: value,
-            message,
+            message: message.map(|m| m.into_owned()),
             timestamp: Utc::now(),
             context: Arc::clone(&self.context),
         };
@@ -214,11 +213,14 @@ impl Logger {
 
     pub fn __log_with_message<T: Serialize>(
         &self,
-        message: Option<&str>,
+        message: Option<Cow<'static, str>>,
         data: &T,
         level: LogLevel,
     ) {
-        let owned_message = message.map(std::string::ToString::to_string);
-        self.log(owned_message, data, level);
+        if level < self.min_level {
+            return;
+        }
+
+        self.log(message, data, level);
     }
 }
