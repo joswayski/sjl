@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use crate::constants::DEFAULT_TIMESTAMP_KEY;
 use crate::logger::LoggerContext;
+use crate::utils::FormatState;
 use crate::{
     colors::ColorSettings,
     constants::{
@@ -86,25 +87,31 @@ impl Drop for ShutdownHandle {
 pub struct Logger {
     pub(crate) log_sender: crossbeam_channel::Sender<LogObject>,
     pub(crate) min_level: LogLevel,
-    pub(crate) timestamp_format: String,
-    pub(crate) timestamp_key: String,
-    pub(crate) color_settings: ColorSettings,
+    // pub(crate) timestamp_format: String,
+    // pub(crate) timestamp_key: String,
+    // pub(crate) color_settings: ColorSettings,
     pub(crate) shutdown_handle: Arc<ShutdownHandle>,
     pub(crate) context: Arc<LoggerContext>,
-    pub(crate) pretty: bool,
+    // pub(crate) pretty: bool,
+    // Global cache so that we don't have to serialize them every tiem
+    pub(crate) format_state: Arc<FormatState>,
 }
 
 impl Logger {
     /// Initialize a new logger with the builder pattern.
     ///
     /// Returns a [`LoggerOptions`] builder that can be configured with:
-    /// - `.min_level()` - Set minimum log level
-    /// - `.batch_size()` - Set number of logs per batch
-    /// - `.batch_duration_ms()` - Set flush interval
-    /// - `.buffer_size()` - Set channel capacity
-    /// - `.timestamp_format()` - Set timestamp format
+    /// - `.min_level()` - Minimum log level to emit
+    /// - `.buffer_size()` - Channel capacity before falling back to sync writes
+    /// - `.batch_size()` - Number of logs per flush batch
+    /// - `.batch_duration_ms()` - Max time to wait before flushing a partial batch
+    /// - `.timestamp_format()` - Chrono format string for timestamps
+    /// - `.timestamp_key()` - Name of the timestamp field in the JSON output
+    /// - `.debug_color()`, `.info_color()`, `.warn_color()`, `.error_color()` - Per-level RGB colors
+    /// - `.context()` - Add global fields that appear on every log line
+    /// - `.pretty()` - Enable multi-line, indented JSON output
     ///
-    /// Call `.build()` to create the logger.
+    /// Call `.build()` to finalize the configuration and start the worker thread.
     #[must_use]
     pub fn init() -> LoggerOptions {
         LoggerOptions {
@@ -152,18 +159,7 @@ impl Logger {
                         timestamp: Utc::now(),
                         context: Arc::clone(&self.context),
                     };
-                    writeln!(
-                        stderr,
-                        "{}",
-                        format_log_line(
-                            &inline,
-                            &self.timestamp_format,
-                            &self.timestamp_key,
-                            &self.color_settings,
-                            self.pretty
-                        )
-                    )
-                    .ok();
+                    writeln!(stderr, "{}", format_log_line(&inline, &self.format_state)).ok();
 
                     let warning = LogObject {
                         message: None,
@@ -173,18 +169,7 @@ impl Logger {
                         context: Arc::clone(&self.context),
                     };
 
-                    writeln!(
-                        stderr,
-                        "{}",
-                        format_log_line(
-                            &warning,
-                            &self.timestamp_format,
-                            &self.timestamp_key,
-                            &self.color_settings,
-                            self.pretty
-                        )
-                    )
-                    .ok();
+                    writeln!(stderr, "{}", format_log_line(&warning, &self.format_state)).ok();
                 }
                 crossbeam_channel::TrySendError::Disconnected(log) => {
                     let inline = LogObject {
@@ -194,18 +179,7 @@ impl Logger {
                         timestamp: Utc::now(),
                         context: Arc::clone(&self.context),
                     };
-                    writeln!(
-                        stderr,
-                        "{}",
-                        format_log_line(
-                            &inline,
-                            &self.timestamp_format,
-                            &self.timestamp_key,
-                            &self.color_settings,
-                            self.pretty
-                        )
-                    )
-                    .ok();
+                    writeln!(stderr, "{}", format_log_line(&inline, &self.format_state)).ok();
                 }
             }
         }

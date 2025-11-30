@@ -5,8 +5,8 @@ use crate::{
     LogLevel, Logger, RGB,
     colors::ColorSettings,
     globals::GLOBAL_LOGGER,
-    logger::{LogObject, LoggerContext},
-    utils::{RESERVED_FIELD_NAMES, flush_batch},
+    logger::{self, LogObject, LoggerContext},
+    utils::{FormatState, RESERVED_FIELD_NAMES, flush_batch},
 };
 
 use super::core::ShutdownHandle;
@@ -195,12 +195,43 @@ impl LoggerOptions {
         let (shutdown_sender, shutdown_receiver) = crossbeam_channel::bounded::<()>(1);
 
         // Move configuration into the worker thread
-        let timestamp_format = self.timestamp_format.clone();
-        let timestamp_key = self.timestamp_key.clone();
+
         let colors = self.color_settings;
         let batch_size = self.batch_size;
         let batch_duration = Duration::from_millis(self.batch_duration_ms);
-        let pretty = self.pretty;
+        let mut context_fields_pretty: Option<serde_json::Map<String, Value>> = None;
+        let mut context_fields_standard: Option<String> = None;
+
+        if self.pretty {
+            let mut ctx_fields: serde_json::Map<String, Value> = serde_json::Map::new();
+
+            // Add context fields
+            for (k, v) in &self.context {
+                ctx_fields.insert(k.clone(), v.clone());
+            }
+
+            context_fields_pretty = Some(ctx_fields);
+        } else {
+            context_fields_standard = Some(
+                self.context
+                    .iter()
+                    .map(|(k, v)| format!(r#""{}": {}"#, k, serde_json::to_string(v).unwrap()))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+        }
+
+        let format_state = Arc::new(FormatState {
+            timestamp_format: self.timestamp_format,
+            timestamp_key: self.timestamp_key,
+            color_settings: colors,
+            pretty: self.pretty,
+            context_fields_pretty,
+            context_fields_standard,
+        });
+
+        // For use in logger thread
+        let format_state_clone = Arc::clone(&format_state);
 
         let worker_thread = std::thread::spawn(move || {
             let mut batch = Vec::<LogObject>::with_capacity(batch_size);
@@ -211,7 +242,7 @@ impl LoggerOptions {
                     recv(log_receiver) -> msg => if let Ok(log) = msg {
                             batch.push(log);
                             if batch.len() >= batch_size {
-                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                                flush_batch( &batch, &format_state_clone);
                                 batch.clear();
                                 deadline = crossbeam_channel::after(batch_duration);
                             }
@@ -219,13 +250,13 @@ impl LoggerOptions {
                         else {
                             // Sender disconnected, flush remaining logs and exit
                             if !batch.is_empty() {
-                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                                flush_batch( &batch, &format_state_clone);
                             }
                             break;
                         },
                     recv(deadline) -> _ => {
                         if !batch.is_empty() {
-                            flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                            flush_batch( &batch, &format_state_clone);
                             batch.clear();
                         }
                         deadline = crossbeam_channel::after(batch_duration);
@@ -240,14 +271,14 @@ impl LoggerOptions {
                         while let Ok(log) = log_receiver.try_recv() {
                             batch.push(log);
                             if batch.len() >= batch_size {
-                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                                flush_batch(&batch, &format_state_clone);
                                 batch.clear();
                             }
                         }
 
                         // Flush final batch
                         if !batch.is_empty() {
-                            flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                            flush_batch(&batch, &format_state_clone);
                         }
                         break;
                     }
@@ -260,12 +291,9 @@ impl LoggerOptions {
         let logger = Logger {
             log_sender,
             min_level: self.min_level,
-            timestamp_format: self.timestamp_format,
-            timestamp_key: self.timestamp_key,
-            color_settings: colors,
             shutdown_handle,
             context: Arc::new(self.context),
-            pretty: self.pretty,
+            format_state,
         };
 
         match GLOBAL_LOGGER.set(logger) {

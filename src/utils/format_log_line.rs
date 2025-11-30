@@ -3,7 +3,7 @@ use hashbrown::HashMap;
 use is_terminal::IsTerminal;
 use serde::{self, Serialize};
 use serde_json::Value;
-use std::io::stderr;
+use std::{io::stderr, sync::Arc};
 
 // Note: timestamp is not on here as it can be overridden
 pub const RESERVED_FIELD_NAMES: [&str; 4] = ["level", "context", "message", "data"];
@@ -18,32 +18,45 @@ pub struct LogOutput<'a> {
     data: &'a Value,
 }
 
-pub fn format_log_line(
-    log: &LogObject,
-    timestamp_format: &str,
-    timestamp_key: &str,
-    color_settings: &ColorSettings,
-    pretty: bool,
-) -> String {
+// Thr reason for this is that we don't want to reserialize certain fields
+// Specifically the context fields on each log
+// So this acts as a cache absically and we Arc it so that it can
+// 1. be used in here in the formatter
+// 2. be passe down to the logger in .build()
+pub struct FormatState {
+    pub timestamp_format: String,
+    pub timestamp_key: String,
+    pub color_settings: ColorSettings,
+    pub pretty: bool,
+    pub context_fields_pretty: Option<serde_json::Map<String, Value>>,
+    pub context_fields_standard: Option<String>,
+}
+
+pub fn format_log_line(log: &LogObject, format_state: &Arc<FormatState>) -> String {
     let level_as_str = log.log_level.as_str();
     // Only apply colors if stderr is connected to a terminal (TTY)
     // This prevents ANSI codes from breaking JSON parsing in log aggregators
     let is_tty = stderr().is_terminal();
 
     let level_str_colored = if is_tty {
-        log.log_level.get_colored_string(color_settings)
+        log.log_level
+            .get_colored_string(&format_state.color_settings)
     } else {
         // No TTY, use plain text (valid JSON)
         level_as_str.to_string()
     };
 
-    if pretty {
+    if format_state.pretty {
         // Build a complete JSON object and use serde_json's pretty printer
         let mut output = serde_json::Map::new();
         output.insert("level".to_string(), Value::String(level_as_str.to_string()));
         output.insert(
-            timestamp_key.to_string(),
-            Value::String(log.timestamp.format(timestamp_format).to_string()),
+            format_state.timestamp_key.to_string(),
+            Value::String(
+                log.timestamp
+                    .format(&format_state.timestamp_format)
+                    .to_string(),
+            ),
         );
 
         if let Some(msg) = &log.message {
@@ -57,11 +70,13 @@ pub fn format_log_line(
             output.insert("data".to_string(), log.data.clone());
         }
 
-        // Add context fields
-        for (k, v) in log.context.iter() {
-            output.insert(k.clone(), v.clone());
-        }
+        // Pretty context fields
 
+        if let Some(ctx) = &format_state.context_fields_pretty {
+            for (k, v) in ctx {
+                output.insert(k.clone(), v.clone());
+            }
+        }
         let json_output = Value::Object(output);
         let pretty_json = serde_json::to_string_pretty(&json_output).unwrap();
 
@@ -78,18 +93,14 @@ pub fn format_log_line(
         }
     } else {
         // Original compact format
-        // Build context fields as comma-separated JSON key-value pairs
-        let context_fields = log
-            .context
-            .iter()
-            .map(|(k, v)| format!(r#""{}": {}"#, k, serde_json::to_string(v).unwrap()))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        let context_part = if context_fields.is_empty() {
-            String::new()
+        let context_part = if let Some(fields) = &format_state.context_fields_standard {
+            if fields.is_empty() {
+                String::new()
+            } else {
+                format!(",{}", fields)
+            }
         } else {
-            format!(",{context_fields}")
+            String::new()
         };
 
         log.message.as_ref().map_or_else(
@@ -100,8 +111,8 @@ pub fn format_log_line(
                     format!(
                         r#"{{"level":"{}","{}":"{}","message":"{}"{}}}"#,
                         level_str_colored,
-                        timestamp_key,
-                        log.timestamp.format(timestamp_format),
+                        &format_state.timestamp_key,
+                        log.timestamp.format(&format_state.timestamp_format),
                         log.data.as_str().unwrap(),
                         context_part
                     )
@@ -110,8 +121,8 @@ pub fn format_log_line(
                     format!(
                         r#"{{"level":"{}","{}":"{}","data":{}{}}}"#,
                         level_str_colored,
-                        timestamp_key,
-                        log.timestamp.format(timestamp_format),
+                        &format_state.timestamp_key,
+                        log.timestamp.format(&format_state.timestamp_format),
                         serde_json::to_string(&log.data).unwrap(),
                         context_part
                     )
@@ -122,8 +133,8 @@ pub fn format_log_line(
                 format!(
                     r#"{{"level":"{}","{}":"{}","message":"{}","data":{}{}}}"#,
                     level_str_colored,
-                    timestamp_key,
-                    log.timestamp.format(timestamp_format),
+                    &format_state.timestamp_key,
+                    log.timestamp.format(&format_state.timestamp_format),
                     msg,
                     serde_json::to_string(&log.data).unwrap(),
                     context_part
