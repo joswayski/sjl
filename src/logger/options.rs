@@ -1,12 +1,16 @@
 use serde_json::Value;
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, atomic::AtomicU64},
+    time::Duration,
+};
 
 use crate::{
     LogLevel, Logger, RGB,
     colors::ColorSettings,
+    constants::DEFAULT_BUFFER_FULL_LAST_WARN_MS,
     globals::GLOBAL_LOGGER,
     logger::{LogObject, LoggerContext},
-    utils::{RESERVED_FIELD_NAMES, flush_batch},
+    utils::{FormatState, RESERVED_FIELD_NAMES, flush_batch},
 };
 
 use super::core::ShutdownHandle;
@@ -195,12 +199,29 @@ impl LoggerOptions {
         let (shutdown_sender, shutdown_receiver) = crossbeam_channel::bounded::<()>(1);
 
         // Move configuration into the worker thread
-        let timestamp_format = self.timestamp_format.clone();
-        let timestamp_key = self.timestamp_key.clone();
+
         let colors = self.color_settings;
         let batch_size = self.batch_size;
         let batch_duration = Duration::from_millis(self.batch_duration_ms);
-        let pretty = self.pretty;
+        let mut context_fields: Vec<(String, Value)> = Vec::new();
+
+        if self.context.keys().len() > 0 {
+            // Add context fields
+            for (k, v) in &self.context {
+                context_fields.push((k.clone(), v.clone()));
+            }
+        }
+
+        let format_state = Arc::new(FormatState {
+            timestamp_format: self.timestamp_format,
+            timestamp_key: self.timestamp_key,
+            color_settings: colors,
+            pretty: self.pretty,
+            context_fields,
+        });
+
+        // For use in logger thread
+        let format_state_clone = Arc::clone(&format_state);
 
         let worker_thread = std::thread::spawn(move || {
             let mut batch = Vec::<LogObject>::with_capacity(batch_size);
@@ -211,7 +232,7 @@ impl LoggerOptions {
                     recv(log_receiver) -> msg => if let Ok(log) = msg {
                             batch.push(log);
                             if batch.len() >= batch_size {
-                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                                flush_batch( &batch, &format_state_clone);
                                 batch.clear();
                                 deadline = crossbeam_channel::after(batch_duration);
                             }
@@ -219,13 +240,13 @@ impl LoggerOptions {
                         else {
                             // Sender disconnected, flush remaining logs and exit
                             if !batch.is_empty() {
-                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                                flush_batch( &batch, &format_state_clone);
                             }
                             break;
                         },
                     recv(deadline) -> _ => {
                         if !batch.is_empty() {
-                            flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                            flush_batch( &batch, &format_state_clone);
                             batch.clear();
                         }
                         deadline = crossbeam_channel::after(batch_duration);
@@ -240,14 +261,14 @@ impl LoggerOptions {
                         while let Ok(log) = log_receiver.try_recv() {
                             batch.push(log);
                             if batch.len() >= batch_size {
-                                flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                                flush_batch(&batch, &format_state_clone);
                                 batch.clear();
                             }
                         }
 
                         // Flush final batch
                         if !batch.is_empty() {
-                            flush_batch(&batch, &timestamp_format, &timestamp_key, &colors, pretty);
+                            flush_batch(&batch, &format_state_clone);
                         }
                         break;
                     }
@@ -260,12 +281,10 @@ impl LoggerOptions {
         let logger = Logger {
             log_sender,
             min_level: self.min_level,
-            timestamp_format: self.timestamp_format,
-            timestamp_key: self.timestamp_key,
-            color_settings: colors,
             shutdown_handle,
             context: Arc::new(self.context),
-            pretty: self.pretty,
+            format_state,
+            buffer_full_last_warn_ms: AtomicU64::new(DEFAULT_BUFFER_FULL_LAST_WARN_MS),
         };
 
         match GLOBAL_LOGGER.set(logger) {

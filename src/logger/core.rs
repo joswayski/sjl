@@ -1,19 +1,21 @@
-use std::io::{Write, stderr};
+use std::borrow::Cow;
+use std::io::stderr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::constants::DEFAULT_TIMESTAMP_KEY;
+use crate::constants::{DEFAULT_BUFFER_FULL_LAST_WARN_MS, DEFAULT_TIMESTAMP_KEY};
 use crate::logger::LoggerContext;
+use crate::utils::{FormatState, write_log_line};
 use crate::{
     colors::ColorSettings,
     constants::{
         DEFAULT_BATCH_DURATION_MS, DEFAULT_BATCH_SIZE, DEFAULT_BUFFER_SIZE,
         DEFAULT_TIMESTAMP_FORMAT,
     },
-    utils::format_log_line,
 };
 
 use super::{levels::LogLevel, options::LoggerOptions};
@@ -86,25 +88,33 @@ impl Drop for ShutdownHandle {
 pub struct Logger {
     pub(crate) log_sender: crossbeam_channel::Sender<LogObject>,
     pub(crate) min_level: LogLevel,
-    pub(crate) timestamp_format: String,
-    pub(crate) timestamp_key: String,
-    pub(crate) color_settings: ColorSettings,
+
     pub(crate) shutdown_handle: Arc<ShutdownHandle>,
     pub(crate) context: Arc<LoggerContext>,
-    pub(crate) pretty: bool,
+    // pub(crate) pretty: bool,
+    // Global cache so that we don't have to serialize them every tiem
+    pub(crate) format_state: Arc<FormatState>,
+
+    // So we can log warning messages that the buffer is full and should be increased
+    // Deault, one per second
+    pub(crate) buffer_full_last_warn_ms: AtomicU64,
 }
 
 impl Logger {
     /// Initialize a new logger with the builder pattern.
     ///
     /// Returns a [`LoggerOptions`] builder that can be configured with:
-    /// - `.min_level()` - Set minimum log level
-    /// - `.batch_size()` - Set number of logs per batch
-    /// - `.batch_duration_ms()` - Set flush interval
-    /// - `.buffer_size()` - Set channel capacity
-    /// - `.timestamp_format()` - Set timestamp format
+    /// - `.min_level()` - Minimum log level to emit
+    /// - `.buffer_size()` - Channel capacity before falling back to sync writes
+    /// - `.batch_size()` - Number of logs per flush batch
+    /// - `.batch_duration_ms()` - Max time to wait before flushing a partial batch
+    /// - `.timestamp_format()` - Chrono format string for timestamps
+    /// - `.timestamp_key()` - Name of the timestamp field in the JSON output
+    /// - `.debug_color()`, `.info_color()`, `.warn_color()`, `.error_color()` - Per-level RGB colors
+    /// - `.context()` - Add global fields that appear on every log line
+    /// - `.pretty()` - Enable multi-line, indented JSON output
     ///
-    /// Call `.build()` to create the logger.
+    /// Call `.build()` to finalize the configuration and start the worker thread.
     #[must_use]
     pub fn init() -> LoggerOptions {
         LoggerOptions {
@@ -120,11 +130,9 @@ impl Logger {
         }
     }
 
-    fn log<T: Serialize>(&self, message: Option<String>, data: &T, log_level: LogLevel) {
-        if log_level < self.min_level {
-            return;
-        }
+    fn log<T: Serialize>(&self, message: Option<Cow<'static, str>>, data: &T, log_level: LogLevel) {
         let value = match serde_json::to_value(data) {
+            // Yes i know we're not checking if it's already a Value type so we're paying the cost here
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to serialize {e}");
@@ -135,7 +143,7 @@ impl Logger {
         let log_object = LogObject {
             log_level,
             data: value,
-            message,
+            message: message.map(|m| m.into_owned()),
             timestamp: Utc::now(),
             context: Arc::clone(&self.context),
         };
@@ -145,6 +153,26 @@ impl Logger {
             let mut stderr = stderr().lock();
             match err {
                 crossbeam_channel::TrySendError::Full(log) => {
+                    // Check if it's been greater than the interval between attempting to log again
+                    let now = chrono::Utc::now().timestamp_millis() as u64;
+                    let last = self.buffer_full_last_warn_ms.load(Ordering::Relaxed);
+
+                    if now.saturating_sub(last) >= DEFAULT_BUFFER_FULL_LAST_WARN_MS
+                        && self
+                            .buffer_full_last_warn_ms
+                            .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+                            .is_ok()
+                    {
+                        let warning = LogObject {
+                            message: None,
+                            log_level:  LogLevel::Warn,
+                            data: serde_json::to_value("Logger buffer full - consider increasing the buffer_size! This log bypassed batching.").unwrap(),
+                            timestamp: Utc::now(),
+                            context: Arc::clone(&self.context),
+                        };
+
+                        write_log_line(&mut stderr, &warning, &self.format_state).ok();
+                    }
                     let inline = LogObject {
                         log_level: log.log_level,
                         data: log.data,
@@ -152,39 +180,7 @@ impl Logger {
                         timestamp: Utc::now(),
                         context: Arc::clone(&self.context),
                     };
-                    writeln!(
-                        stderr,
-                        "{}",
-                        format_log_line(
-                            &inline,
-                            &self.timestamp_format,
-                            &self.timestamp_key,
-                            &self.color_settings,
-                            self.pretty
-                        )
-                    )
-                    .ok();
-
-                    let warning = LogObject {
-                        message: None,
-                        log_level:  LogLevel::Warn,
-                        data: serde_json::to_value("Logger buffer full - consider increasing the buffer_size! This log bypassed batching.").unwrap(),
-                        timestamp: Utc::now(),
-                        context: Arc::clone(&self.context),
-                    };
-
-                    writeln!(
-                        stderr,
-                        "{}",
-                        format_log_line(
-                            &warning,
-                            &self.timestamp_format,
-                            &self.timestamp_key,
-                            &self.color_settings,
-                            self.pretty
-                        )
-                    )
-                    .ok();
+                    write_log_line(&mut stderr, &inline, &self.format_state).ok();
                 }
                 crossbeam_channel::TrySendError::Disconnected(log) => {
                     let inline = LogObject {
@@ -194,18 +190,7 @@ impl Logger {
                         timestamp: Utc::now(),
                         context: Arc::clone(&self.context),
                     };
-                    writeln!(
-                        stderr,
-                        "{}",
-                        format_log_line(
-                            &inline,
-                            &self.timestamp_format,
-                            &self.timestamp_key,
-                            &self.color_settings,
-                            self.pretty
-                        )
-                    )
-                    .ok();
+                    write_log_line(&mut stderr, &inline, &self.format_state).ok();
                 }
             }
         }
@@ -240,11 +225,14 @@ impl Logger {
 
     pub fn __log_with_message<T: Serialize>(
         &self,
-        message: Option<&str>,
+        message: Option<Cow<'static, str>>,
         data: &T,
         level: LogLevel,
     ) {
-        let owned_message = message.map(std::string::ToString::to_string);
-        self.log(owned_message, data, level);
+        if level < self.min_level {
+            return;
+        }
+
+        self.log(message, data, level);
     }
 }

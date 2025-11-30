@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicU64;
+
 /// Default size of the channel - max messages you can send at one time
 pub const DEFAULT_BUFFER_SIZE: usize = 1024;
 
@@ -12,3 +14,6 @@ pub const DEFAULT_TIMESTAMP_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.3fZ";
 
 /// Default key name for timestamps. Default is `timestamp`
 pub const DEFAULT_TIMESTAMP_KEY: &str = "timestamp";
+
+/// Default delay beore warning if the buffer size is full and should be increased, in milliseconds
+pub const DEFAULT_BUFFER_FULL_LAST_WARN_MS: u64 = 1000;

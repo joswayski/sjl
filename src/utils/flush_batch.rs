@@ -1,22 +1,16 @@
-use std::io::{Write, stderr};
+use std::{io::stderr, sync::Arc};
 
-use crate::{colors::ColorSettings, logger::LogObject, utils::format_log_line};
+use crate::{
+    logger::LogObject,
+    utils::write_log_line::{FormatState, write_log_line},
+};
 
-pub fn flush_batch(
-    batch: &[LogObject],
-    timestamp_format: &str,
-    timestamp_key: &str,
-    color_settings: &ColorSettings,
-    pretty: bool,
-) {
+pub fn flush_batch(batch: &[LogObject], format_state: &Arc<FormatState>) {
     // Lock once for the whole batch
     let mut stderr = stderr().lock();
     for log in batch {
-        writeln!(
-            stderr,
-            "{}",
-            format_log_line(log, timestamp_format, timestamp_key, color_settings, pretty)
-        )
-        .ok();
+        if let Err(err) = write_log_line(&mut stderr, log, format_state) {
+            eprintln!("failed to write log: {err}")
+        }
     }
 }
