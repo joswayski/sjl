@@ -1,11 +1,15 @@
 use serde_json::Value;
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, atomic::AtomicU64},
+    time::Duration,
+};
 
 use crate::{
     LogLevel, Logger, RGB,
     colors::ColorSettings,
+    constants::DEFAULT_BUFFER_FULL_LAST_WARN_MS,
     globals::GLOBAL_LOGGER,
-    logger::{self, LogObject, LoggerContext},
+    logger::{LogObject, LoggerContext},
     utils::{FormatState, RESERVED_FIELD_NAMES, flush_batch},
 };
 
@@ -199,26 +203,13 @@ impl LoggerOptions {
         let colors = self.color_settings;
         let batch_size = self.batch_size;
         let batch_duration = Duration::from_millis(self.batch_duration_ms);
-        let mut context_fields_pretty: Option<serde_json::Map<String, Value>> = None;
-        let mut context_fields_standard: Option<String> = None;
+        let mut context_fields: Vec<(String, Value)> = Vec::new();
 
-        if self.pretty {
-            let mut ctx_fields: serde_json::Map<String, Value> = serde_json::Map::new();
-
+        if self.context.keys().len() > 0 {
             // Add context fields
             for (k, v) in &self.context {
-                ctx_fields.insert(k.clone(), v.clone());
+                context_fields.push((k.clone(), v.clone()));
             }
-
-            context_fields_pretty = Some(ctx_fields);
-        } else {
-            context_fields_standard = Some(
-                self.context
-                    .iter()
-                    .map(|(k, v)| format!(r#""{}": {}"#, k, serde_json::to_string(v).unwrap()))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            );
         }
 
         let format_state = Arc::new(FormatState {
@@ -226,8 +217,7 @@ impl LoggerOptions {
             timestamp_key: self.timestamp_key,
             color_settings: colors,
             pretty: self.pretty,
-            context_fields_pretty,
-            context_fields_standard,
+            context_fields,
         });
 
         // For use in logger thread
@@ -294,6 +284,7 @@ impl LoggerOptions {
             shutdown_handle,
             context: Arc::new(self.context),
             format_state,
+            buffer_full_last_warn_ms: AtomicU64::new(DEFAULT_BUFFER_FULL_LAST_WARN_MS),
         };
 
         match GLOBAL_LOGGER.set(logger) {

@@ -1,21 +1,21 @@
 use std::borrow::Cow;
 use std::io::{Write, stderr};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::constants::DEFAULT_TIMESTAMP_KEY;
+use crate::constants::{DEFAULT_BUFFER_FULL_LAST_WARN_MS, DEFAULT_TIMESTAMP_KEY};
 use crate::logger::LoggerContext;
-use crate::utils::FormatState;
+use crate::utils::{FormatState, write_log_line};
 use crate::{
     colors::ColorSettings,
     constants::{
         DEFAULT_BATCH_DURATION_MS, DEFAULT_BATCH_SIZE, DEFAULT_BUFFER_SIZE,
         DEFAULT_TIMESTAMP_FORMAT,
     },
-    utils::format_log_line,
 };
 
 use super::{levels::LogLevel, options::LoggerOptions};
@@ -88,14 +88,16 @@ impl Drop for ShutdownHandle {
 pub struct Logger {
     pub(crate) log_sender: crossbeam_channel::Sender<LogObject>,
     pub(crate) min_level: LogLevel,
-    // pub(crate) timestamp_format: String,
-    // pub(crate) timestamp_key: String,
-    // pub(crate) color_settings: ColorSettings,
+
     pub(crate) shutdown_handle: Arc<ShutdownHandle>,
     pub(crate) context: Arc<LoggerContext>,
     // pub(crate) pretty: bool,
     // Global cache so that we don't have to serialize them every tiem
     pub(crate) format_state: Arc<FormatState>,
+
+    // So we can log warning messages that the buffer is full and should be increased
+    // Deault, one per second
+    pub(crate) buffer_full_last_warn_ms: AtomicU64,
 }
 
 impl Logger {
@@ -151,6 +153,26 @@ impl Logger {
             let mut stderr = stderr().lock();
             match err {
                 crossbeam_channel::TrySendError::Full(log) => {
+                    // Check if it's been greater than the interval between attempting to log again
+                    let now = chrono::Utc::now().timestamp_millis() as u64;
+                    let last = self.buffer_full_last_warn_ms.load(Ordering::Relaxed);
+
+                    if now.saturating_sub(last) >= DEFAULT_BUFFER_FULL_LAST_WARN_MS
+                        && self
+                            .buffer_full_last_warn_ms
+                            .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+                            .is_ok()
+                    {
+                        let warning = LogObject {
+                            message: None,
+                            log_level:  LogLevel::Warn,
+                            data: serde_json::to_value("Logger buffer full - consider increasing the buffer_size! This log bypassed batching.").unwrap(),
+                            timestamp: Utc::now(),
+                            context: Arc::clone(&self.context),
+                        };
+
+                        write_log_line(&mut stderr, &warning, &self.format_state).ok();
+                    }
                     let inline = LogObject {
                         log_level: log.log_level,
                         data: log.data,
@@ -158,17 +180,7 @@ impl Logger {
                         timestamp: Utc::now(),
                         context: Arc::clone(&self.context),
                     };
-                    writeln!(stderr, "{}", format_log_line(&inline, &self.format_state)).ok();
-
-                    let warning = LogObject {
-                        message: None,
-                        log_level:  LogLevel::Warn,
-                        data: serde_json::to_value("Logger buffer full - consider increasing the buffer_size! This log bypassed batching.").unwrap(),
-                        timestamp: Utc::now(),
-                        context: Arc::clone(&self.context),
-                    };
-
-                    writeln!(stderr, "{}", format_log_line(&warning, &self.format_state)).ok();
+                    write_log_line(&mut stderr, &inline, &self.format_state).ok();
                 }
                 crossbeam_channel::TrySendError::Disconnected(log) => {
                     let inline = LogObject {
@@ -178,7 +190,7 @@ impl Logger {
                         timestamp: Utc::now(),
                         context: Arc::clone(&self.context),
                     };
-                    writeln!(stderr, "{}", format_log_line(&inline, &self.format_state)).ok();
+                    write_log_line(&mut stderr, &inline, &self.format_state).ok();
                 }
             }
         }
