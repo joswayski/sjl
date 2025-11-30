@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io::{Write, stderr};
+use std::io::stderr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
