@@ -9,3 +9,9 @@ repository = "https://github.com/joswayski/sjl"
 keywords = ["simple", "structured", "json", "logging", "logger"]
 
 exclude = ["src/main.rs", "*.github/"]
+
+[dependencies]
+chrono = "0.4.44"
+serde = "1.0.228"
+serde_json = "1.0.149"
+tokio = { version = "1.52.3", features = ["full"] }
