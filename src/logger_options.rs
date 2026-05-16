@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use crate::{Logger, logger_error::LoggerError};
+use crate::Logger;
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
@@ -15,7 +15,6 @@ impl Default for LoggerOptions {
     }
 }
 
-#[must_use = "LoggerOptions does nothing until you call `.init()`"]
 impl LoggerOptions {
     #[must_use = "call `.init()` to create a Logger"]
     pub fn context<V: Serialize>(mut self, key: impl Into<String>, value: V) -> Self {
