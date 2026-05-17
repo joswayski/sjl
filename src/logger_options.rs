@@ -76,7 +76,7 @@ impl LoggerOptions {
     /// How many bytes to buffer before flushing. Default is 64kb
     #[must_use = "call `.init()` to create a Logger"]
     pub fn flush_at_bytes(mut self, flush_at_bytes: usize) -> Self {
-        if flush_at_bytes <= 0 {
+        if flush_at_bytes == 0 {
             eprintln!(
                 "Provided 'flush_at_bytes' is invalid, using {}",
                 self.flush_at_bytes
@@ -90,7 +90,7 @@ impl LoggerOptions {
     /// How many messages to hold in memory before flushing. Default is 100
     #[must_use = "call `.init()` to create a Logger"]
     pub fn flush_at_messages(mut self, flush_at_messages: u16) -> Self {
-        if flush_at_messages <= 0 {
+        if flush_at_messages == 0 {
             eprintln!(
                 "Provided 'flush_at_messages' is invalid, using {}",
                 self.flush_at_messages
@@ -101,7 +101,7 @@ impl LoggerOptions {
         self
     }
 
-    /// How long to wait before flushing if either max_bytes or max_messages are not past their thresholds.
+    /// How long to wait before flushing if either `flush_at_bytes` or `flush_at_messages` are not past their thresholds.
     /// Default is 1 second.
     #[must_use = "call `.init()` to create a Logger"]
     pub fn flush_interval(mut self, interval: Duration) -> Self {
@@ -111,7 +111,7 @@ impl LoggerOptions {
 
     /// Minimum log level to use. Anything below will not be logged.
     /// From left to right: Debug, Info, Warn, Error. Default is Debug.
-    /// If you set the min_level to Warn, then Debug and Info WILL NOT show in your logs.
+    /// If you set the `min_level` to Warn, then Debug and Info WILL NOT show in your logs.
     #[must_use = "call `.init()` to create a Logger"]
     pub fn min_level(mut self, level: LogLevel) -> Self {
         self.min_level = level;
@@ -120,8 +120,8 @@ impl LoggerOptions {
 
     /// Set a custom timestamp format
     /// Use these guides as reference:
-    /// https://docs.rs/chrono/latest/chrono/#formatting-and-parsing &
-    /// https://docs.rs/chrono/latest/chrono/format/strftime/index.html#specifiers
+    /// <https://docs.rs/chrono/latest/chrono/#formatting-and-parsing> &
+    /// <https://docs.rs/chrono/latest/chrono/format/strftime/index.html#specifiers>
     #[must_use = "call `.init()` to create a Logger"]
     pub fn timestamp_format(mut self, timestamp_format: &'static str) -> Self {
         self.timestamp_format = Some(timestamp_format);
@@ -147,9 +147,10 @@ impl LoggerOptions {
     // Initializes the logger and returns it
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(self) -> Logger {
-        if LOGGER_INITIALIZED.swap(true, Ordering::SeqCst) {
-            panic!("Logger already initialized! Only call .init() once");
-        }
+        assert!(
+            LOGGER_INITIALIZED.swap(true, Ordering::SeqCst),
+            "Logger already initialized! Only call .init() once"
+        );
 
         let (sender, worker) = mpsc::channel::<Vec<u8>>();
 
