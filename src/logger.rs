@@ -1,16 +1,19 @@
 use crate::{
-    LoggerOptions, log_event::LogEvent, log_level::LogLevel, logger_options::LOGGER_INITIALIZED,
+    log_event::LogEvent,
+    log_level::LogLevel,
+    logger_options::{LOGGER_INITIALIZED, LoggerOptions},
 };
 use chrono::{SecondsFormat, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
     io::Write,
+    mem,
     sync::{
         atomic::Ordering,
         mpsc::{self, Receiver, RecvTimeoutError},
     },
-    time::{self, Duration, Instant},
+    time::Duration,
 };
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
@@ -18,6 +21,7 @@ pub struct Logger {
     pub(crate) context: Map<String, Value>,
     pub(crate) sender: Option<mpsc::Sender<Vec<u8>>>,
     pub(crate) worker: Option<std::thread::JoinHandle<()>>,
+    pub(crate) min_level: LogLevel,
 }
 
 impl Default for Logger {
@@ -42,30 +46,49 @@ impl Drop for Logger {
 }
 
 impl Logger {
-    pub fn info<Data: Serialize>(&self, message: impl AsRef<str>, data: Data) {
-        self.log(LogLevel::Info, message.as_ref(), data);
+    pub fn builder() -> LoggerOptions {
+        LoggerOptions::default()
     }
-    pub fn warn<Data: Serialize>(&self, message: impl AsRef<str>, data: Data) {
-        self.log(LogLevel::Warn, message.as_ref(), data);
+    pub fn new() -> Self {
+        LoggerOptions::default().init()
     }
-    pub fn error<Data: Serialize>(&self, message: impl AsRef<str>, data: Data) {
-        self.log(LogLevel::Error, message.as_ref(), data);
+    pub fn info<CustomData: Serialize>(&self, message: impl AsRef<str>, custom_data: CustomData) {
+        self.log(LogLevel::Info, message.as_ref(), custom_data);
     }
-    pub fn debug<Data: Serialize>(&self, message: impl AsRef<str>, data: Data) {
-        self.log(LogLevel::Debug, message.as_ref(), data);
+    pub fn warn<CustomData: Serialize>(&self, message: impl AsRef<str>, custom_data: CustomData) {
+        self.log(LogLevel::Warn, message.as_ref(), custom_data);
+    }
+    pub fn error<CustomData: Serialize>(&self, message: impl AsRef<str>, custom_data: CustomData) {
+        self.log(LogLevel::Error, message.as_ref(), custom_data);
+    }
+    pub fn debug<CustomData: Serialize>(&self, message: impl AsRef<str>, custom_data: CustomData) {
+        self.log(LogLevel::Debug, message.as_ref(), custom_data);
     }
 
-    fn log<Data: Serialize>(&self, log_level: LogLevel, message: impl AsRef<str>, data: Data) {
+    fn log<CustomData: Serialize>(
+        &self,
+        log_level: LogLevel,
+        message: impl AsRef<str>,
+        custom_data: CustomData,
+    ) {
+        if log_level.severity() < self.min_level.severity() {
+            return;
+        }
         let timestamp = Utc::now()
             // https://docs.rs/chrono/latest/chrono/#formatting-and-parsing &
             // https://docs.rs/chrono/latest/chrono/format/strftime/index.html#specifiers
             .to_rfc3339_opts(SecondsFormat::Millis, true);
 
+        let data = if mem::size_of::<CustomData>() == 0 {
+            None
+        } else {
+            Some(&custom_data)
+        };
         let log_event = LogEvent {
             context: &self.context,
             level: log_level.as_str(),
             timestamp: &timestamp,
-            data: Some(&data),
+            data,
             message: message.as_ref(),
         };
 
@@ -133,7 +156,6 @@ impl Logger {
 
         let mut stdout = std::io::stdout().lock();
 
-        let now = Instant::now();
         let _ = stdout.write_all(batch);
         let _ = stdout.flush();
 

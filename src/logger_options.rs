@@ -10,35 +10,33 @@ use std::{
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use crate::Logger;
+use crate::{Logger, log_level::LogLevel};
 
 pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
     pub(crate) context: Map<String, Value>,
-    /// How many bytes to buffer before flushing. Default is 64kb
     pub(crate) max_bytes: usize,
-
-    /// How many messages to hold in memory before flushing. Default is 100
     pub(crate) max_messages: u16,
-
-    /// How long to wait before flushing if either max_bytes or max_messages are not past their thresholds.
-    /// Default is 1 second
     pub(crate) flush_interval: Duration,
+    pub(crate) min_level: LogLevel,
 }
+
 impl Default for LoggerOptions {
     fn default() -> Self {
         LoggerOptions {
             context: Map::new(),
             max_bytes: 64 * 1024,
             max_messages: 100,
+            min_level: LogLevel::Debug,
             flush_interval: Duration::from_secs(1),
         }
     }
 }
 
 impl LoggerOptions {
+    // Sets a key, value pair that will be added to all of the logs that are produced
     #[must_use = "call `.init()` to create a Logger"]
     pub fn context<V: Serialize>(mut self, key: impl Into<String>, value: V) -> Self {
         let key = key.into();
@@ -59,6 +57,7 @@ impl LoggerOptions {
         self
     }
 
+    /// How many bytes to buffer before flushing. Default is 64kb
     #[must_use = "call `.init()` to create a Logger"]
     pub fn max_bytes(mut self, max_bytes: usize) -> Self {
         if max_bytes <= 0 {
@@ -69,6 +68,7 @@ impl LoggerOptions {
         self
     }
 
+    /// How many messages to hold in memory before flushing. Default is 100
     #[must_use = "call `.init()` to create a Logger"]
     pub fn max_messages(mut self, max_messages: u16) -> Self {
         if max_messages <= 0 {
@@ -82,9 +82,20 @@ impl LoggerOptions {
         self
     }
 
+    /// How long to wait before flushing if either max_bytes or max_messages are not past their thresholds.
+    /// Default is 1 second.
     #[must_use = "call `.init()` to create a Logger"]
     pub fn flush_interval(mut self, interval: Duration) -> Self {
         self.flush_interval = interval;
+        self
+    }
+
+    #[must_use = "call `.init()` to create a Logger"]
+    /// Minimum log level to use. Anything below will not be logged.
+    /// From left to right: Debug, Info, Warn, Error. Default is Debug.
+    /// If you set the min_level to Warn, then Debug and Info WILL NOT show in your logs.
+    pub fn min_level(mut self, level: LogLevel) -> Self {
+        self.min_level = level;
         self
     }
 
@@ -105,6 +116,7 @@ impl LoggerOptions {
         );
 
         let logger = Logger {
+            min_level: self.min_level,
             context: self.context,
             sender: Some(sender),
             worker: Some(worker),

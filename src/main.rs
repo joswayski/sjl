@@ -2,7 +2,7 @@ use std::{collections::HashMap, num::NonZeroUsize, thread, time::Duration};
 
 use serde::Serialize;
 use serde_json::Map;
-use sjl::{Logger, LoggerOptions, json};
+use sjl::{Logger, json};
 
 #[derive(Serialize)]
 struct Blob {
@@ -15,18 +15,15 @@ enum Status {
 }
 fn main() -> () {
     // or..
-    let logger = LoggerOptions::default()
-        .flush_interval(Duration::from_secs(5))
-        .max_messages(2)
-        .init();
 
-    logger.info("yeah", ());
-    logger.info("yeah2", ());
-    logger.info("yeah3", ());
+    let logger = Logger::builder().context("service", "shipments").init();
 
-    thread::sleep(Duration::from_secs(5));
-    thread::sleep(Duration::from_secs(5));
-
-    logger.info("yeah4", ());
-    logger.info("yeah5", ());
+    logger.debug("Debug", ());
+    logger.info("Info", ());
+    logger.warn("warn", ());
+    logger.error("error", ());
+    logger.error(
+        format!("tomato soup {}", 12),
+        json!({"message": "from jose"}),
+    );
 }

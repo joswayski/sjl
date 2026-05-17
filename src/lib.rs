@@ -5,5 +5,5 @@ pub use logger::Logger;
 
 mod log_event;
 mod log_level;
+pub use log_level::LogLevel;
 mod logger_options;
-pub use logger_options::LoggerOptions;
