@@ -148,7 +148,7 @@ impl LoggerOptions {
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(self) -> Logger {
         assert!(
-            LOGGER_INITIALIZED.swap(true, Ordering::SeqCst),
+            !LOGGER_INITIALIZED.swap(true, Ordering::SeqCst),
             "Logger already initialized! Only call .init() once"
         );
 

@@ -9,7 +9,6 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
     io::Write,
-    mem,
     sync::{
         Arc,
         atomic::Ordering,
@@ -17,6 +16,8 @@ use std::{
     },
     time::Duration,
 };
+
+const MAX_BUFFER_POOL_VECTOR_SIZE: usize = 8 * 1024;
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
@@ -84,7 +85,7 @@ impl Logger {
         }
 
         // Don't serialize the empty data: () in the log event to null, just skip it
-        let data = if mem::size_of::<CustomData>() == 0 {
+        let data = if size_of::<CustomData>() == 0 {
             None
         } else {
             Some(&custom_data)
@@ -114,6 +115,9 @@ impl Logger {
 
         if let Err(e) = result {
             eprintln!("Error ocurred converting log event to bytes. Error: {e}");
+            // Extra check, re-clear the buffer before putting it back
+            buf.clear();
+
             // Return the buffer to the pool if we errored
             let _ = self.buffer_pool.push(buf);
             return;
@@ -144,22 +148,36 @@ impl Logger {
                         batch.extend_from_slice(&log_buffer);
                         message_count += 1;
 
-                        // Clear the buffer and return it to the pool
+                        // Clear the buffer
                         log_buffer.clear();
+
+                        // Check if the log that just came in made the vec grow
+                        // past a certain size and trim it down if it did
+                        // This has to come after clear because shrink_to docs:
+                        // `The capacity will remain at least as large as both the length and the supplied value`
+                        // So if we shrink first with items still in it, it'll still be the size of the items inside
+                        // even though the capacity provided is smaller: max(len(), MAX_BUFFER_POOL_VECTOR_SIZE)
+                        if log_buffer.capacity() > MAX_BUFFER_POOL_VECTOR_SIZE {
+                            log_buffer.shrink_to(MAX_BUFFER_POOL_VECTOR_SIZE);
+                        }
+
+                        // and return it to the pool
                         let _ = buffer_pool.push(log_buffer);
 
                         // Happy path, flush logs
                         if message_count >= flush_at_messages || batch.len() >= flush_at_bytes {
-                            Logger::flush(&mut batch, &mut message_count);
+                            Logger::flush(&mut batch);
+                            message_count = 0;
                         }
                     }
                     // Flush regardless of what happened, we might be shutting down
                     Err(RecvTimeoutError::Disconnected) => {
-                        Logger::flush(&mut batch, &mut message_count);
+                        Logger::flush(&mut batch);
                         break;
                     }
                     Err(RecvTimeoutError::Timeout) => {
-                        Logger::flush(&mut batch, &mut message_count);
+                        Logger::flush(&mut batch);
+                        message_count = 0;
                         // Don't break to keep the loop going
                     }
                 }
@@ -167,7 +185,7 @@ impl Logger {
         })
     }
 
-    fn flush(batch: &mut Vec<u8>, message_count: &mut u16) {
+    fn flush(batch: &mut Vec<u8>) {
         if batch.is_empty() {
             return;
         }
@@ -178,6 +196,5 @@ impl Logger {
         let _ = stdout.flush();
 
         batch.clear();
-        *message_count = 0;
     }
 }
