@@ -1,22 +1,43 @@
-use crate::{LoggerOptions, log_event::LogEvent, log_level::LogLevel};
+use crate::{
+    LoggerOptions, log_event::LogEvent, log_level::LogLevel, logger_options::LOGGER_INITIALIZED,
+};
 use chrono::{SecondsFormat, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
     io::Write,
-    sync::mpsc::{self, RecvTimeoutError},
+    sync::{
+        atomic::Ordering,
+        mpsc::{self, Receiver, RecvTimeoutError},
+    },
     time::Duration,
 };
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
     pub(crate) context: Map<String, Value>,
-    pub(crate) sender: mpsc::Sender<Vec<u8>>,
+    pub(crate) sender: Option<mpsc::Sender<Vec<u8>>>,
+    pub(crate) worker: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Default for Logger {
     fn default() -> Self {
         LoggerOptions::default().init()
+    }
+}
+
+impl Drop for Logger {
+    fn drop(&mut self) {
+        // Drop the sender so worker gets Disconnected
+        self.sender.take();
+
+        // Wait for thread to flush and exit
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+
+        // Let others create
+        let _ = LOGGER_INITIALIZED.swap(false, Ordering::SeqCst);
     }
 }
 
@@ -48,45 +69,54 @@ impl Logger {
             message: message.as_ref(),
         };
 
-        let mut log_event = serde_json::to_vec(&log_event).unwrap(); // todo
+        let mut log_event = match serde_json::to_vec(&log_event) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                eprintln!("Error ocurred converting log event to bytes. Error: {e}");
+                return;
+            }
+        };
+
+        // newline
         log_event.push(b'\n');
 
-        let _ = self.sender.send(log_event);
+        if let Some(sender) = &self.sender {
+            let _ = sender.send(log_event);
+        }
     }
 
     pub(crate) fn handle_messages(
-        receiver: mpsc::Receiver<Vec<u8>>,
+        worker: Receiver<Vec<u8>>,
         max_bytes: usize,
         max_messages: u16,
         flush_interval: Duration,
-    ) {
+    ) -> std::thread::JoinHandle<()> {
         // Spawn a dedicated thread for logs
         std::thread::spawn(move || {
-            let stdout = std::io::stdout();
-            let mut stdout = stdout.lock();
-
             let mut batch = Vec::<u8>::with_capacity(max_bytes);
             let mut message_count: u16 = 0;
             loop {
-                match receiver.recv_timeout(flush_interval) {
+                match worker.recv_timeout(flush_interval) {
                     Ok(log_bytes) => {
                         batch.extend_from_slice(&log_bytes);
                         message_count += 1;
 
+                        // Happy path
                         if Logger::should_flush(&batch, message_count, max_bytes, max_messages) {
-                            Logger::flush(&mut stdout, &mut batch, &mut message_count);
+                            Logger::flush(&mut batch, &mut message_count);
                         }
                     }
+                    // Everything else, flush regardless of what happened
                     Err(RecvTimeoutError::Disconnected) => {
-                        Logger::flush(&mut stdout, &mut batch, &mut message_count);
+                        Logger::flush(&mut batch, &mut message_count);
                         break;
                     }
                     Err(RecvTimeoutError::Timeout) => {
-                        Logger::flush(&mut stdout, &mut batch, &mut message_count);
+                        Logger::flush(&mut batch, &mut message_count);
                     }
                 }
             }
-        });
+        })
     }
 
     fn should_flush(batch: &[u8], message_count: u16, max_bytes: usize, max_messages: u16) -> bool {
@@ -96,13 +126,15 @@ impl Logger {
 
         false
     }
-    fn flush(writer: &mut impl Write, batch: &mut Vec<u8>, message_count: &mut u16) {
+    fn flush(batch: &mut Vec<u8>, message_count: &mut u16) {
         if batch.is_empty() {
             return;
         }
 
-        let _ = writer.write_all(batch);
-        let _ = writer.flush();
+        let mut stdout = std::io::stdout().lock();
+
+        let _ = stdout.write_all(batch);
+        let _ = stdout.flush();
 
         batch.clear();
         *message_count = 0;

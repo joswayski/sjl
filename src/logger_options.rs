@@ -1,13 +1,17 @@
 use std::{
-    sync::mpsc::{self, RecvTimeoutError},
-    thread::spawn,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, RecvTimeoutError},
+    },
     time::Duration,
 };
 
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use crate::{Logger, log_event::LogEvent};
+use crate::Logger;
+
+pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
@@ -56,20 +60,25 @@ impl LoggerOptions {
 
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(self) -> Logger {
-        let (sender, receiver) = mpsc::channel::<Vec<u8>>();
+        if LOGGER_INITIALIZED.swap(true, Ordering::SeqCst) {
+            panic!("Logger already initialized! Only call .init() once");
+        }
 
-        let logger = Logger {
-            context: self.context,
-            sender,
-        };
+        let (sender, worker) = mpsc::channel::<Vec<u8>>();
 
         // Run in background
-        Logger::handle_messages(
-            receiver,
+        let worker = Logger::handle_messages(
+            worker,
             self.max_bytes,
             self.max_messages,
             self.flush_interval,
         );
+
+        let logger = Logger {
+            context: self.context,
+            sender: Some(sender),
+            worker: Some(worker),
+        };
 
         logger
     }
