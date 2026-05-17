@@ -2,9 +2,8 @@ use crate::{
     log_event::LogEvent,
     log_level::LogLevel,
     logger_options::{LOGGER_INITIALIZED, LoggerOptions},
-    timestamp::{DEFAULT_TS_FORMAT, FormattedTimestamp},
+    timestamp::FormattedTimestamp,
 };
-use chrono::{SecondsFormat, Utc};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
@@ -45,7 +44,7 @@ impl Drop for Logger {
             let _ = worker.join();
         }
 
-        // Let others create
+        // Let other creations happen once dropped
         let _ = LOGGER_INITIALIZED.swap(false, Ordering::SeqCst);
     }
 }
@@ -80,11 +79,13 @@ impl Logger {
             return;
         }
 
+        // Don't serialize the empty data: () in the loggers to null, just skip it
         let data = if mem::size_of::<CustomData>() == 0 {
             None
         } else {
             Some(&custom_data)
         };
+
         let log_event = LogEvent {
             context: &self.context,
             level: log_level.as_str(),
@@ -107,7 +108,7 @@ impl Logger {
             }
         };
 
-        // newline
+        // newline between logs
         log_event.push(b'\n');
 
         if let Some(sender) = &self.sender {

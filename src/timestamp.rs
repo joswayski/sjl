@@ -8,6 +8,9 @@ pub(crate) struct FormattedTimestamp<'a> {
 }
 
 impl Serialize for FormattedTimestamp<'_> {
+    // This a voids an allocation when creating the timestamp
+    // before sending it through the channel. It streams chrono's Display output
+    // through serde into the output buffer/
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_str(&self.dt.format(self.fmt))
     }
