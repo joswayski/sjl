@@ -21,6 +21,8 @@ pub struct LoggerOptions {
     pub(crate) flush_interval: Duration,
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: Option<&'static str>,
+    pub(crate) timestamp_key: &'static str,
+    pub(crate) pretty: bool,
 }
 
 impl Default for LoggerOptions {
@@ -32,6 +34,8 @@ impl Default for LoggerOptions {
             min_level: LogLevel::Debug,
             flush_interval: Duration::from_secs(1),
             timestamp_format: None,
+            timestamp_key: "timestamp",
+            pretty: false,
         }
     }
 }
@@ -91,10 +95,10 @@ impl LoggerOptions {
         self
     }
 
-    #[must_use = "call `.init()` to create a Logger"]
     /// Minimum log level to use. Anything below will not be logged.
     /// From left to right: Debug, Info, Warn, Error. Default is Debug.
     /// If you set the min_level to Warn, then Debug and Info WILL NOT show in your logs.
+    #[must_use = "call `.init()` to create a Logger"]
     pub fn min_level(mut self, level: LogLevel) -> Self {
         self.min_level = level;
         self
@@ -104,11 +108,29 @@ impl LoggerOptions {
     /// Use these guides as reference:
     /// https://docs.rs/chrono/latest/chrono/#formatting-and-parsing &
     /// https://docs.rs/chrono/latest/chrono/format/strftime/index.html#specifiers
+    #[must_use = "call `.init()` to create a Logger"]
     pub fn timestamp_format(mut self, timestamp_format: &'static str) -> Self {
         self.timestamp_format = Some(timestamp_format);
 
         self
     }
+
+    /// Remap the timestamp key from `timestamp` to something else like `time`
+    /// TODO!
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn timestamp_key(mut self, timestamp_key: &'static str) -> Self {
+        self.timestamp_key = timestamp_key;
+        self
+    }
+
+    /// Whether to use multi-line JSON log lines. Default `false`
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn pretty(mut self, pretty: bool) -> Self {
+        self.pretty = pretty;
+        self
+    }
+
+    // Initializes the logger and returns it
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(self) -> Logger {
         if LOGGER_INITIALIZED.swap(true, Ordering::SeqCst) {
@@ -128,6 +150,7 @@ impl LoggerOptions {
         let logger = Logger {
             min_level: self.min_level,
             timestamp_format: self.timestamp_format,
+            pretty: self.pretty,
             context: self.context,
             sender: Some(sender),
             worker: Some(worker),

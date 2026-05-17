@@ -25,6 +25,7 @@ pub struct Logger {
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: Option<&'static str>,
     pub(crate) context: Map<String, Value>,
+    pub(crate) pretty: bool,
 }
 
 impl Default for Logger {
@@ -92,12 +93,17 @@ impl Logger {
         let log_event = LogEvent {
             context: &self.context,
             level: log_level.as_str(),
-            timestamp: &timestamp,
+            timestamp: &timestamp, // TODO custom timestamp key with custom serialize impl
             data,
             message: message.as_ref(),
         };
 
-        let mut log_event = match serde_json::to_vec(&log_event) {
+        // TODO buffers
+        let mut log_event = match if self.pretty {
+            serde_json::to_vec_pretty(&log_event)
+        } else {
+            serde_json::to_vec(&log_event)
+        } {
             Ok(bytes) => bytes,
             Err(e) => {
                 eprintln!("Error ocurred converting log event to bytes. Error: {e}");
