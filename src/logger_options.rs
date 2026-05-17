@@ -1,16 +1,34 @@
+use std::{
+    sync::mpsc::{self, RecvTimeoutError},
+    thread::spawn,
+    time::Duration,
+};
+
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use crate::Logger;
+use crate::{Logger, log_event::LogEvent};
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
     pub(crate) context: Map<String, Value>,
+    /// How many bytes to buffer before flushing. Default is 64kb
+    pub(crate) max_bytes: usize,
+
+    /// How many messages to hold in memory before flushing. Default is 100
+    pub(crate) max_messages: u16,
+
+    /// How long to wait before flushing if either max_bytes or max_messages are not past their thresholds.
+    /// Default is 1 second
+    pub(crate) flush_interval: Duration,
 }
 impl Default for LoggerOptions {
     fn default() -> Self {
         LoggerOptions {
             context: Map::new(),
+            max_bytes: 64 * 1024,
+            max_messages: 100,
+            flush_interval: Duration::from_secs(1),
         }
     }
 }
@@ -38,8 +56,21 @@ impl LoggerOptions {
 
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(self) -> Logger {
-        Logger {
+        let (sender, receiver) = mpsc::channel::<Vec<u8>>();
+
+        let logger = Logger {
             context: self.context,
-        }
+            sender,
+        };
+
+        // Run in background
+        Logger::handle_messages(
+            receiver,
+            self.max_bytes,
+            self.max_messages,
+            self.flush_interval,
+        );
+
+        logger
     }
 }

@@ -29,5 +29,7 @@ fn main() -> () {
         )
         .init();
 
+    let logger = Logger::default();
+
     logger.info("yeah", ());
 }
