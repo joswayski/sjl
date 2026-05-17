@@ -2,6 +2,7 @@ use crate::{
     log_event::LogEvent,
     log_level::LogLevel,
     logger_options::{LOGGER_INITIALIZED, LoggerOptions},
+    timestamp::{DEFAULT_TS_FORMAT, FormattedTimestamp},
 };
 use chrono::{SecondsFormat, Utc};
 use serde::Serialize;
@@ -93,7 +94,11 @@ impl Logger {
         let log_event = LogEvent {
             context: &self.context,
             level: log_level.as_str(),
-            timestamp: &timestamp, // TODO custom timestamp key with custom serialize impl
+            // TODO custom timestamp key with custom serialize impl
+            timestamp: FormattedTimestamp {
+                dt: Utc::now(),
+                fmt: self.timestamp_format.unwrap_or(DEFAULT_TS_FORMAT),
+            },
             data,
             message: message.as_ref(),
         };
