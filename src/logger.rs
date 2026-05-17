@@ -80,12 +80,6 @@ impl Logger {
             return;
         }
 
-        let timestamp = match self.timestamp_format {
-            // Use the provided formatter if available
-            Some(fmt) => Utc::now().format(fmt).to_string(),
-            None => Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-        };
-
         let data = if mem::size_of::<CustomData>() == 0 {
             None
         } else {
@@ -95,10 +89,7 @@ impl Logger {
             context: &self.context,
             level: log_level.as_str(),
             // TODO custom timestamp key with custom serialize impl
-            timestamp: FormattedTimestamp {
-                dt: Utc::now(),
-                fmt: self.timestamp_format.unwrap_or(DEFAULT_TS_FORMAT),
-            },
+            timestamp: FormattedTimestamp::new(self.timestamp_format),
             data,
             message: message.as_ref(),
         };

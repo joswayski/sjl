@@ -12,3 +12,12 @@ impl Serialize for FormattedTimestamp<'_> {
         serializer.collect_str(&self.dt.format(self.fmt))
     }
 }
+
+impl FormattedTimestamp<'_> {
+    pub(crate) fn new(tz_format: Option<&'static str>) -> Self {
+        FormattedTimestamp {
+            dt: Utc::now(),
+            fmt: tz_format.unwrap_or(DEFAULT_TS_FORMAT),
+        }
+    }
+}
