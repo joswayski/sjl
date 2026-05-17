@@ -17,8 +17,6 @@ use std::{
     time::Duration,
 };
 
-const MAX_BUFFER_POOL_VECTOR_SIZE: usize = 8 * 1024;
-
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
     pub(crate) sender: Option<mpsc::Sender<Vec<u8>>>,
@@ -134,6 +132,7 @@ impl Logger {
     pub(crate) fn handle_messages(
         worker: Receiver<Vec<u8>>,
         buffer_pool: Arc<ArrayQueue<Vec<u8>>>,
+        buffer_pool_max_capacity: usize,
         flush_at_bytes: usize,
         flush_at_messages: u16,
         flush_interval: Duration,
@@ -157,8 +156,9 @@ impl Logger {
                         // `The capacity will remain at least as large as both the length and the supplied value`
                         // So if we shrink first with items still in it, it'll still be the size of the items inside
                         // even though the capacity provided is smaller: max(len(), MAX_BUFFER_POOL_VECTOR_SIZE)
-                        if log_buffer.capacity() > MAX_BUFFER_POOL_VECTOR_SIZE {
-                            log_buffer.shrink_to(MAX_BUFFER_POOL_VECTOR_SIZE);
+                        if log_buffer.capacity() >= buffer_pool_max_capacity {
+                            // TODO log warnings when this happens.
+                            log_buffer.shrink_to(buffer_pool_max_capacity);
                         }
 
                         // and return it to the pool

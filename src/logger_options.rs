@@ -15,6 +15,12 @@ use crate::{Logger, log_level::LogLevel};
 
 pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
+const DEFAULT_FLUSH_AT_BYTES: usize = 64 * 2048;
+const DEFAULT_FLUSH_AT_MESSAGES: u16 = 100;
+const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
+const DEFAULT_BUFFER_POOL_CAPACITY: usize = 2048;
+const DEFAULT_BUFFER_POOL_MAX_CAPACITY: usize = 20 * DEFAULT_BUFFER_POOL_CAPACITY;
+
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
     // Batching
@@ -25,6 +31,7 @@ pub struct LoggerOptions {
     // Buffer pool // ! TODO setters
     pub(crate) buffer_pool_size: usize,
     pub(crate) buffer_pool_capacity: usize,
+    pub(crate) buffer_pool_max_capacity: usize,
 
     // Behavior
     pub(crate) context: Map<String, Value>,
@@ -38,15 +45,16 @@ impl Default for LoggerOptions {
     fn default() -> Self {
         LoggerOptions {
             context: Map::new(),
-            flush_at_bytes: 64 * 1024,
-            flush_at_messages: 100,
+            flush_at_bytes: DEFAULT_FLUSH_AT_BYTES,
+            flush_at_messages: DEFAULT_FLUSH_AT_MESSAGES,
             min_level: LogLevel::Debug,
             flush_interval: Duration::from_secs(1),
             timestamp_format: None,
             timestamp_key: "timestamp",
             pretty: false,
-            buffer_pool_size: 64,
-            buffer_pool_capacity: 1024,
+            buffer_pool_size: DEFAULT_BUFFER_POOL_SIZE,
+            buffer_pool_capacity: DEFAULT_BUFFER_POOL_CAPACITY,
+            buffer_pool_max_capacity: DEFAULT_BUFFER_POOL_MAX_CAPACITY,
         }
     }
 }
@@ -73,7 +81,7 @@ impl LoggerOptions {
         self
     }
 
-    /// How many bytes to buffer before flushing. Default is 64kb
+    /// How many bytes to buffer before flushing. Default is `DEFAULT_FLUSH_AT_BYTES`
     #[must_use = "call `.init()` to create a Logger"]
     pub fn flush_at_bytes(mut self, flush_at_bytes: usize) -> Self {
         if flush_at_bytes == 0 {
@@ -87,7 +95,7 @@ impl LoggerOptions {
         self
     }
 
-    /// How many messages to hold in memory before flushing. Default is 100
+    /// How many messages to hold in memory before flushing. Default is `DEFAULT_FLUSH_AT_MESSAGES`
     #[must_use = "call `.init()` to create a Logger"]
     pub fn flush_at_messages(mut self, flush_at_messages: u16) -> Self {
         if flush_at_messages == 0 {
@@ -97,6 +105,56 @@ impl LoggerOptions {
             )
         } else {
             self.flush_at_messages = flush_at_messages
+        }
+        self
+    }
+
+    /// How big the initial buffer pool should be to avoid new allocations per log
+    /// This creates a buffer pool of Vec<u8> that are reused.
+    /// Set this to your estimate of concurrent inflight logs for your application.
+    /// Default is 64.
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn buffer_pool_size(mut self, buffer_pool_size: usize) -> Self {
+        if buffer_pool_size == 0 {
+            eprintln!(
+                "Provided 'buffer_pool_size' is invalid, using {}",
+                self.buffer_pool_size
+            )
+        } else {
+            self.buffer_pool_size = buffer_pool_size;
+        }
+        self
+    }
+
+    /// How big each log is. This is used to preallocate buffers in a pool so they can be reused.
+    /// There is also a `buffer_pool_max_capacity` which will trim Vec<u8>'s back down
+    /// if they get resized over the limit.
+    /// Set this to your estimate of how big your logs are
+    /// Default is 2kb.
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn buffer_pool_capacity(mut self, buffer_pool_capacity: usize) -> Self {
+        if buffer_pool_capacity == 0 {
+            eprintln!(
+                "Provided 'buffer_pool_capacity' is invalid, using {}",
+                self.buffer_pool_capacity
+            )
+        } else {
+            self.buffer_pool_capacity = buffer_pool_capacity;
+        }
+        self
+    }
+
+    /// The absolute max size a buffer can grow to before being shrunk
+    /// If you're hitting this often, it might be good to increase the `buffer_pool_capacity`
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn buffer_pool_max_capacity(mut self, buffer_pool_max_capacity: usize) -> Self {
+        if buffer_pool_max_capacity == 0 {
+            eprintln!(
+                "Provided 'buffer_pool_max_capacity' is invalid, using {}",
+                self.buffer_pool_max_capacity
+            )
+        } else {
+            self.buffer_pool_max_capacity = buffer_pool_max_capacity;
         }
         self
     }
@@ -129,13 +187,13 @@ impl LoggerOptions {
         self
     }
 
-    /// Remap the timestamp key from `timestamp` to something else like `time`
-    /// TODO!
-    #[must_use = "call `.init()` to create a Logger"]
-    pub fn timestamp_key(mut self, timestamp_key: &'static str) -> Self {
-        self.timestamp_key = timestamp_key;
-        self
-    }
+    // /// Remap the timestamp key from `timestamp` to something else like `time`
+    // /// TODO!
+    // #[must_use = "call `.init()` to create a Logger"]
+    // pub fn timestamp_key(mut self, timestamp_key: &'static str) -> Self {
+    //     self.timestamp_key = timestamp_key;
+    //     self
+    // }
 
     /// Whether to use multi-line JSON log lines. Default `false`
     #[must_use = "call `.init()` to create a Logger"]
@@ -146,11 +204,20 @@ impl LoggerOptions {
 
     // Initializes the logger and returns it
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
-    pub fn init(self) -> Logger {
+    pub fn init(mut self) -> Logger {
         assert!(
             !LOGGER_INITIALIZED.swap(true, Ordering::SeqCst),
             "Logger already initialized! Only call .init() once"
         );
+
+        if self.buffer_pool_capacity >= self.buffer_pool_max_capacity {
+            eprintln!(
+                "buffer_pool_max_capacity ({}) < buffer_pool_capacity ({}); clamping max to capacity",
+                self.buffer_pool_max_capacity, self.buffer_pool_capacity
+            );
+
+            self.buffer_pool_max_capacity = self.buffer_pool_capacity;
+        }
 
         let (sender, worker) = mpsc::channel::<Vec<u8>>();
 
@@ -164,6 +231,7 @@ impl LoggerOptions {
         let worker = Logger::handle_messages(
             worker,
             Arc::clone(&buffer_pool),
+            self.buffer_pool_max_capacity,
             self.flush_at_bytes,
             self.flush_at_messages,
             self.flush_interval,
