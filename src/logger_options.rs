@@ -1,11 +1,13 @@
 use std::{
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
         mpsc::{self},
     },
     time::Duration,
 };
 
+use crossbeam_queue::ArrayQueue;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -15,10 +17,17 @@ pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
-    pub(crate) context: Map<String, Value>,
-    pub(crate) max_bytes: usize,
-    pub(crate) max_messages: u16,
+    // Batching
+    pub(crate) flush_at_bytes: usize,
+    pub(crate) flush_at_messages: u16,
     pub(crate) flush_interval: Duration,
+
+    // Buffer pool // ! TODO setters
+    pub(crate) buffer_pool_size: usize,
+    pub(crate) buffer_pool_capacity: usize,
+
+    // Behavior
+    pub(crate) context: Map<String, Value>,
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: Option<&'static str>,
     pub(crate) timestamp_key: &'static str,
@@ -29,13 +38,15 @@ impl Default for LoggerOptions {
     fn default() -> Self {
         LoggerOptions {
             context: Map::new(),
-            max_bytes: 64 * 1024,
-            max_messages: 100,
+            flush_at_bytes: 64 * 1024,
+            flush_at_messages: 100,
             min_level: LogLevel::Debug,
             flush_interval: Duration::from_secs(1),
             timestamp_format: None,
             timestamp_key: "timestamp",
             pretty: false,
+            buffer_pool_size: 64,
+            buffer_pool_capacity: 1024,
         }
     }
 }
@@ -64,25 +75,28 @@ impl LoggerOptions {
 
     /// How many bytes to buffer before flushing. Default is 64kb
     #[must_use = "call `.init()` to create a Logger"]
-    pub fn max_bytes(mut self, max_bytes: usize) -> Self {
-        if max_bytes <= 0 {
-            eprintln!("Provided 'max_bytes' is invalid, using {}", self.max_bytes)
+    pub fn flush_at_bytes(mut self, flush_at_bytes: usize) -> Self {
+        if flush_at_bytes <= 0 {
+            eprintln!(
+                "Provided 'flush_at_bytes' is invalid, using {}",
+                self.flush_at_bytes
+            )
         } else {
-            self.max_bytes = max_bytes
+            self.flush_at_bytes = flush_at_bytes
         }
         self
     }
 
     /// How many messages to hold in memory before flushing. Default is 100
     #[must_use = "call `.init()` to create a Logger"]
-    pub fn max_messages(mut self, max_messages: u16) -> Self {
-        if max_messages <= 0 {
+    pub fn flush_at_messages(mut self, flush_at_messages: u16) -> Self {
+        if flush_at_messages <= 0 {
             eprintln!(
-                "Provided 'max_messages' is invalid, using {}",
-                self.max_messages
+                "Provided 'flush_at_messages' is invalid, using {}",
+                self.flush_at_messages
             )
         } else {
-            self.max_messages = max_messages
+            self.flush_at_messages = flush_at_messages
         }
         self
     }
@@ -139,23 +153,30 @@ impl LoggerOptions {
 
         let (sender, worker) = mpsc::channel::<Vec<u8>>();
 
+        // Pre allocate a few buffers into the pool
+        let buffer_pool = Arc::new(ArrayQueue::new(self.buffer_pool_size));
+        for _ in 0..self.buffer_pool_size {
+            let _ = buffer_pool.push(Vec::with_capacity(self.buffer_pool_capacity));
+        }
+
         // Run in background
         let worker = Logger::handle_messages(
             worker,
-            self.max_bytes,
-            self.max_messages,
+            Arc::clone(&buffer_pool),
+            self.flush_at_bytes,
+            self.flush_at_messages,
             self.flush_interval,
         );
 
-        let logger = Logger {
+        Logger {
             min_level: self.min_level,
+            buffer_pool,
+            buffer_pool_capacity: self.buffer_pool_capacity,
             timestamp_format: self.timestamp_format,
             pretty: self.pretty,
             context: self.context,
             sender: Some(sender),
             worker: Some(worker),
-        };
-
-        logger
+        }
     }
 }

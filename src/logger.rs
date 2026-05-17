@@ -4,12 +4,14 @@ use crate::{
     logger_options::{LOGGER_INITIALIZED, LoggerOptions},
     timestamp::FormattedTimestamp,
 };
+use crossbeam_queue::ArrayQueue;
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
     io::Write,
     mem,
     sync::{
+        Arc,
         atomic::Ordering,
         mpsc::{self, Receiver, RecvTimeoutError},
     },
@@ -20,6 +22,8 @@ use std::{
 pub struct Logger {
     pub(crate) sender: Option<mpsc::Sender<Vec<u8>>>,
     pub(crate) worker: Option<std::thread::JoinHandle<()>>,
+    pub(crate) buffer_pool: Arc<ArrayQueue<Vec<u8>>>,
+    pub(crate) buffer_pool_capacity: usize,
 
     // Options
     pub(crate) min_level: LogLevel,
@@ -79,7 +83,7 @@ impl Logger {
             return;
         }
 
-        // Don't serialize the empty data: () in the loggers to null, just skip it
+        // Don't serialize the empty data: () in the log event to null, just skip it
         let data = if mem::size_of::<CustomData>() == 0 {
             None
         } else {
@@ -95,68 +99,74 @@ impl Logger {
             message: message.as_ref(),
         };
 
-        // TODO buffers
-        let mut log_event = match if self.pretty {
-            serde_json::to_vec_pretty(&log_event)
+        // get a buffer from the pool instead of creating one each time
+        let mut buf = self
+            .buffer_pool
+            .pop()
+            .unwrap_or_else(|| Vec::with_capacity(self.buffer_pool_capacity));
+        buf.clear(); // just in case
+
+        let result = if self.pretty {
+            serde_json::to_writer_pretty(&mut buf, &log_event)
         } else {
-            serde_json::to_vec(&log_event)
-        } {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                eprintln!("Error ocurred converting log event to bytes. Error: {e}");
-                return;
-            }
+            serde_json::to_writer(&mut buf, &log_event)
+        };
+
+        if let Err(e) = result {
+            eprintln!("Error ocurred converting log event to bytes. Error: {e}");
+            // Return the buffer to the pool if we errored
+            let _ = self.buffer_pool.push(buf);
+            return;
         };
 
         // newline between logs
-        log_event.push(b'\n');
+        buf.push(b'\n');
 
         if let Some(sender) = &self.sender {
-            let _ = sender.send(log_event);
+            let _ = sender.send(buf);
         }
     }
 
     pub(crate) fn handle_messages(
         worker: Receiver<Vec<u8>>,
-        max_bytes: usize,
-        max_messages: u16,
+        buffer_pool: Arc<ArrayQueue<Vec<u8>>>,
+        flush_at_bytes: usize,
+        flush_at_messages: u16,
         flush_interval: Duration,
     ) -> std::thread::JoinHandle<()> {
         // Spawn a dedicated thread for logs
         std::thread::spawn(move || {
-            let mut batch = Vec::<u8>::with_capacity(max_bytes);
+            let mut batch = Vec::<u8>::with_capacity(flush_at_bytes);
             let mut message_count: u16 = 0;
             loop {
                 match worker.recv_timeout(flush_interval) {
-                    Ok(log_bytes) => {
-                        batch.extend_from_slice(&log_bytes);
+                    Ok(mut log_buffer) => {
+                        batch.extend_from_slice(&log_buffer);
                         message_count += 1;
 
-                        // Happy path
-                        if Logger::should_flush(&batch, message_count, max_bytes, max_messages) {
+                        // Clear the buffer and return it to the pool
+                        log_buffer.clear();
+                        let _ = buffer_pool.push(log_buffer);
+
+                        // Happy path, flush logs
+                        if message_count >= flush_at_messages || batch.len() >= flush_at_bytes {
                             Logger::flush(&mut batch, &mut message_count);
                         }
                     }
-                    // Everything else, flush regardless of what happened
+                    // Flush regardless of what happened, we might be shutting down
                     Err(RecvTimeoutError::Disconnected) => {
                         Logger::flush(&mut batch, &mut message_count);
                         break;
                     }
                     Err(RecvTimeoutError::Timeout) => {
                         Logger::flush(&mut batch, &mut message_count);
+                        // Don't break to keep the loop going
                     }
                 }
             }
         })
     }
 
-    fn should_flush(batch: &[u8], message_count: u16, max_bytes: usize, max_messages: u16) -> bool {
-        if message_count >= max_messages || batch.len() >= max_bytes {
-            return true;
-        }
-
-        false
-    }
     fn flush(batch: &mut Vec<u8>, message_count: &mut u16) {
         if batch.is_empty() {
             return;
