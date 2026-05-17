@@ -16,7 +16,10 @@ enum Status {
 fn main() -> () {
     // or..
 
-    let logger = Logger::builder().context("service", "shipments").init();
+    let logger = Logger::builder()
+        .context("service", "shipments")
+        .timestamp_format("%Y-%M-%D")
+        .init();
 
     logger.debug("Debug", ());
     logger.info("Info", ());

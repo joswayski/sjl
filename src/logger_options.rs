@@ -1,8 +1,7 @@
 use std::{
-    num::{NonZeroU16, NonZeroUsize},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc::{self, RecvTimeoutError},
+        mpsc::{self},
     },
     time::Duration,
 };
@@ -21,6 +20,7 @@ pub struct LoggerOptions {
     pub(crate) max_messages: u16,
     pub(crate) flush_interval: Duration,
     pub(crate) min_level: LogLevel,
+    pub(crate) timestamp_format: Option<&'static str>,
 }
 
 impl Default for LoggerOptions {
@@ -31,6 +31,7 @@ impl Default for LoggerOptions {
             max_messages: 100,
             min_level: LogLevel::Debug,
             flush_interval: Duration::from_secs(1),
+            timestamp_format: None,
         }
     }
 }
@@ -99,6 +100,15 @@ impl LoggerOptions {
         self
     }
 
+    /// Set a custom timestamp format
+    /// Use these guides as reference:
+    /// https://docs.rs/chrono/latest/chrono/#formatting-and-parsing &
+    /// https://docs.rs/chrono/latest/chrono/format/strftime/index.html#specifiers
+    pub fn timestamp_format(mut self, timestamp_format: &'static str) -> Self {
+        self.timestamp_format = Some(timestamp_format);
+
+        self
+    }
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(self) -> Logger {
         if LOGGER_INITIALIZED.swap(true, Ordering::SeqCst) {
@@ -117,6 +127,7 @@ impl LoggerOptions {
 
         let logger = Logger {
             min_level: self.min_level,
+            timestamp_format: self.timestamp_format,
             context: self.context,
             sender: Some(sender),
             worker: Some(worker),

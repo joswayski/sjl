@@ -18,10 +18,13 @@ use std::{
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
-    pub(crate) context: Map<String, Value>,
     pub(crate) sender: Option<mpsc::Sender<Vec<u8>>>,
     pub(crate) worker: Option<std::thread::JoinHandle<()>>,
+
+    // Options
     pub(crate) min_level: LogLevel,
+    pub(crate) timestamp_format: Option<&'static str>,
+    pub(crate) context: Map<String, Value>,
 }
 
 impl Default for Logger {
@@ -74,10 +77,12 @@ impl Logger {
         if log_level.severity() < self.min_level.severity() {
             return;
         }
-        let timestamp = Utc::now()
-            // https://docs.rs/chrono/latest/chrono/#formatting-and-parsing &
-            // https://docs.rs/chrono/latest/chrono/format/strftime/index.html#specifiers
-            .to_rfc3339_opts(SecondsFormat::Millis, true);
+
+        let timestamp = match self.timestamp_format {
+            // Use the provided formatter if available
+            Some(fmt) => Utc::now().format(fmt).to_string(),
+            None => Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        };
 
         let data = if mem::size_of::<CustomData>() == 0 {
             None
