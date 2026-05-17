@@ -1,4 +1,5 @@
 use std::{
+    num::{NonZeroU16, NonZeroUsize},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, RecvTimeoutError},
@@ -55,6 +56,35 @@ impl LoggerOptions {
             }
         };
 
+        self
+    }
+
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn max_bytes(mut self, max_bytes: usize) -> Self {
+        if max_bytes <= 0 {
+            eprintln!("Provided 'max_bytes' is invalid, using {}", self.max_bytes)
+        } else {
+            self.max_bytes = max_bytes
+        }
+        self
+    }
+
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn max_messages(mut self, max_messages: u16) -> Self {
+        if max_messages <= 0 {
+            eprintln!(
+                "Provided 'max_messages' is invalid, using {}",
+                self.max_messages
+            )
+        } else {
+            self.max_messages = max_messages
+        }
+        self
+    }
+
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn flush_interval(mut self, interval: Duration) -> Self {
+        self.flush_interval = interval;
         self
     }
 

@@ -10,7 +10,7 @@ use std::{
         atomic::Ordering,
         mpsc::{self, Receiver, RecvTimeoutError},
     },
-    time::Duration,
+    time::{self, Duration, Instant},
 };
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
@@ -133,6 +133,7 @@ impl Logger {
 
         let mut stdout = std::io::stdout().lock();
 
+        let now = Instant::now();
         let _ = stdout.write_all(batch);
         let _ = stdout.flush();
 

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, thread, time::Duration};
+use std::{collections::HashMap, num::NonZeroUsize, thread, time::Duration};
 
 use serde::Serialize;
 use serde_json::Map;
@@ -15,24 +15,16 @@ enum Status {
 }
 fn main() -> () {
     // or..
-    let mut map = HashMap::new();
-    map.insert(123, "bong");
-
     let logger = LoggerOptions::default()
-        .context(
-            "beans",
-            Status::Paid {
-                amount: 12.to_string(),
-                blob: Blob { age: 15 },
-            },
-        )
+        .flush_interval(Duration::from_secs(5))
+        .max_messages(2)
         .init();
 
     logger.info("yeah", ());
-
-    thread::sleep(Duration::from_secs(5));
     logger.info("yeah2", ());
     logger.info("yeah3", ());
+
+    thread::sleep(Duration::from_secs(5));
     thread::sleep(Duration::from_secs(5));
 
     logger.info("yeah4", ());
