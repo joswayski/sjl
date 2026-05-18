@@ -18,8 +18,8 @@ pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 const DEFAULT_FLUSH_AT_BYTES: usize = 64 * 2048;
 const DEFAULT_FLUSH_AT_MESSAGES: u16 = 100;
 const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
-const DEFAULT_buffer_pool_initial_capacity: usize = 2048;
-const DEFAULT_BUFFER_POOL_MAX_CAPACITY: usize = 20 * DEFAULT_buffer_pool_initial_capacity;
+const DEFAULT_BUFFER_POOL_INITIAL_CAPACITY: usize = 2048;
+const DEFAULT_BUFFER_POOL_MAX_CAPACITY: usize = 20 * DEFAULT_BUFFER_POOL_INITIAL_CAPACITY;
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
@@ -28,13 +28,13 @@ pub struct LoggerOptions {
     pub(crate) flush_at_messages: u16,
     pub(crate) flush_interval: Duration,
 
-    // Buffer pool // ! TODO setters
+    // Buffer pool
     pub(crate) buffer_pool_size: usize,
     pub(crate) buffer_pool_initial_capacity: usize,
     pub(crate) buffer_pool_max_capacity: usize,
 
     // Behavior
-    pub(crate) context: Map<String, Value>,
+    pub(crate) context: Map<String, Value>, // ! TODO add reserved field names again
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: Option<&'static str>,
     pub(crate) timestamp_key: &'static str,
@@ -53,7 +53,7 @@ impl Default for LoggerOptions {
             timestamp_key: "timestamp",
             pretty: false,
             buffer_pool_size: DEFAULT_BUFFER_POOL_SIZE,
-            buffer_pool_initial_capacity: DEFAULT_buffer_pool_initial_capacity,
+            buffer_pool_initial_capacity: DEFAULT_BUFFER_POOL_INITIAL_CAPACITY,
             buffer_pool_max_capacity: DEFAULT_BUFFER_POOL_MAX_CAPACITY,
         }
     }
@@ -219,7 +219,7 @@ impl LoggerOptions {
             self.buffer_pool_max_capacity = self.buffer_pool_initial_capacity;
         }
 
-        let (sender, worker) = mpsc::channel::<Vec<u8>>();
+        let (sender, worker) = crossbeam_channel::unbounded::<Vec<u8>>();
 
         // Pre allocate a few buffers into the pool
         let buffer_pool = Arc::new(ArrayQueue::new(self.buffer_pool_size));

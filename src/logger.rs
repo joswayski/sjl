@@ -4,16 +4,13 @@ use crate::{
     logger_options::{LOGGER_INITIALIZED, LoggerOptions},
     timestamp::FormattedTimestamp,
 };
+use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use crossbeam_queue::ArrayQueue;
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
     io::Write,
-    sync::{
-        Arc,
-        atomic::Ordering,
-        mpsc::{self, Receiver, RecvTimeoutError},
-    },
+    sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
 
@@ -22,7 +19,7 @@ const OVERSIZED_LOG_RESET_WINDOW: Duration = Duration::from_hours(4); // todo al
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
-    pub(crate) sender: Option<mpsc::Sender<Vec<u8>>>,
+    pub(crate) sender: Option<Sender<Vec<u8>>>,
     pub(crate) worker: Option<std::thread::JoinHandle<()>>,
     pub(crate) buffer_pool: Arc<ArrayQueue<Vec<u8>>>,
     pub(crate) buffer_pool_initial_capacity: usize,
@@ -189,7 +186,7 @@ impl Logger {
                                 _ => 100, // Default to 1% of logs (1 in 100)
                             };
                             if log_was_oversized
-                                && (oversized_messages_count == 0 // Log a warning on first ocurrance or every 50
+                                && (oversized_messages_count == 0 // Log a warning on first ocurrance or every N (set above)
                                 || oversized_messages_count.is_multiple_of(warn_every_n))
                             {
                                 // If its an oversized string, we obviously don't want to log the whole thing
@@ -217,13 +214,12 @@ impl Logger {
                             if log_was_oversized {
                                 oversized_messages_count += 1;
                             }
-
-                            // Clear the buffer
-                            log_buffer.clear();
-                            // And shrink any that has grown past the max threshold since they double each time
-                            log_buffer.shrink_to(buffer_pool_initial_capacity);
                         }
 
+                        // Clear the buffer
+                        log_buffer.clear();
+                        // And shrink any that has grown past the max threshold since they double each time
+                        log_buffer.shrink_to(buffer_pool_initial_capacity);
                         // and return it to the pool
                         let _ = buffer_pool.push(log_buffer);
 
