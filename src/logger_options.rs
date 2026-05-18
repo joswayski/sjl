@@ -20,6 +20,7 @@ const DEFAULT_FLUSH_AT_MESSAGES: u16 = 100;
 const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
 const DEFAULT_BUFFER_POOL_INITIAL_CAPACITY: usize = 2048;
 const DEFAULT_BUFFER_POOL_MAX_CAPACITY: usize = 20 * DEFAULT_BUFFER_POOL_INITIAL_CAPACITY;
+const RESERVED_FIELD_NAMES: &[&str; 3] = &["timestamp", "level", "message"];
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
@@ -37,7 +38,7 @@ pub struct LoggerOptions {
     pub(crate) context: Map<String, Value>, // ! TODO add reserved field names again
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: Option<&'static str>,
-    pub(crate) timestamp_key: &'static str,
+    pub(crate) timestamp_key: &'static str, // TODO allow overriding
     pub(crate) pretty: bool,
 }
 
@@ -64,6 +65,11 @@ impl LoggerOptions {
     #[must_use = "call `.init()` to create a Logger"]
     pub fn context<V: Serialize>(mut self, key: impl Into<String>, value: V) -> Self {
         let key = key.into();
+        assert!(
+            !RESERVED_FIELD_NAMES.contains(&key.as_str()),
+            "context key '{key}' is reserved. Reserved keys: {RESERVED_FIELD_NAMES:?}"
+        );
+
         match serde_json::to_value(value) {
             // If it's serializable to an object, all is good
             Ok(value) => {
