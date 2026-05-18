@@ -20,7 +20,7 @@ const DEFAULT_FLUSH_AT_MESSAGES: u16 = 100;
 const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
 const DEFAULT_BUFFER_POOL_INITIAL_CAPACITY: usize = 2048;
 const DEFAULT_BUFFER_POOL_MAX_CAPACITY: usize = 20 * DEFAULT_BUFFER_POOL_INITIAL_CAPACITY;
-const RESERVED_FIELD_NAMES: &[&str; 3] = &["timestamp", "level", "message"];
+const RESERVED_FIELD_NAMES: &[&str; 4] = &["timestamp", "level", "message", "data"];
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
