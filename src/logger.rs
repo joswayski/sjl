@@ -17,12 +17,14 @@ use std::{
     time::Duration,
 };
 
+const OVERSIZED_LOG_PREVIEW_LENGTH: usize = 200;
+
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
     pub(crate) sender: Option<mpsc::Sender<Vec<u8>>>,
     pub(crate) worker: Option<std::thread::JoinHandle<()>>,
     pub(crate) buffer_pool: Arc<ArrayQueue<Vec<u8>>>,
-    pub(crate) buffer_pool_capacity: usize,
+    pub(crate) buffer_pool_initial_capacity: usize,
 
     // Options
     pub(crate) min_level: LogLevel,
@@ -102,7 +104,7 @@ impl Logger {
         let mut buf = self
             .buffer_pool
             .pop()
-            .unwrap_or_else(|| Vec::with_capacity(self.buffer_pool_capacity));
+            .unwrap_or_else(|| Vec::with_capacity(self.buffer_pool_initial_capacity));
         buf.clear(); // just in case
 
         let result = if self.pretty {
@@ -133,6 +135,7 @@ impl Logger {
         worker: Receiver<Vec<u8>>,
         buffer_pool: Arc<ArrayQueue<Vec<u8>>>,
         buffer_pool_max_capacity: usize,
+        buffer_pool_initial_capacity: usize,
         flush_at_bytes: usize,
         flush_at_messages: u16,
         flush_interval: Duration,
@@ -141,24 +144,46 @@ impl Logger {
         std::thread::spawn(move || {
             let mut batch = Vec::<u8>::with_capacity(flush_at_bytes);
             let mut message_count: u16 = 0;
+            let mut oversized_count: usize = 0;
+
             loop {
                 match worker.recv_timeout(flush_interval) {
                     Ok(mut log_buffer) => {
                         batch.extend_from_slice(&log_buffer);
                         message_count += 1;
 
-                        // Clear the buffer
-                        log_buffer.clear();
-
                         // Check if the log that just came in made the vec grow
-                        // past a certain size and trim it down if it did
+                        // past a certain size and trim it down if it did.
                         // This has to come after clear because shrink_to docs:
                         // `The capacity will remain at least as large as both the length and the supplied value`
                         // So if we shrink first with items still in it, it'll still be the size of the items inside
                         // even though the capacity provided is smaller: max(len(), MAX_BUFFER_POOL_VECTOR_SIZE)
-                        if log_buffer.capacity() >= buffer_pool_max_capacity {
-                            // TODO log warnings when this happens.
-                            log_buffer.shrink_to(buffer_pool_max_capacity);
+                        // We could also drop the buffer here when it happens, the buffer pool size would shrink
+                        // by 1 and the we'd just get new Vec<u8>'s when/if we run out in the producer
+                        if log_buffer.capacity() > buffer_pool_max_capacity {
+                            // TODO show percentage of logs oversized
+                            if oversized_count == 0 || oversized_count.is_multiple_of(50) {
+                                // Log a warning on first ocurrance or every 50
+                                let log_preview = String::from_utf8_lossy(&log_buffer);
+                                let truncated: String = log_preview
+                                    .chars()
+                                    .take(OVERSIZED_LOG_PREVIEW_LENGTH)
+                                    .collect();
+
+                                let suffix = if log_preview.len() > OVERSIZED_LOG_PREVIEW_LENGTH {
+                                    format!("{}... ({} bytes total)", truncated, log_preview.len())
+                                } else {
+                                    String::new()
+                                };
+                                eprintln!(
+                                    "SJL_WARN: You appear to have some logs that are greater than your buffer_pool_max_capacity. Consider increasing the buffer_pool_initial_capacity value if you see this log a lot. Log that triggered this: {suffix}",
+                                )
+                            }
+
+                            oversized_count += 1;
+                            // Clear the buffer
+                            log_buffer.clear();
+                            log_buffer.shrink_to(buffer_pool_initial_capacity);
                         }
 
                         // and return it to the pool
