@@ -67,7 +67,7 @@ impl LoggerOptions {
         let key = key.into();
         assert!(
             !RESERVED_FIELD_NAMES.contains(&key.as_str()),
-            "context key '{key}' is reserved. Reserved keys: {RESERVED_FIELD_NAMES:?}"
+            "context key '{key}' is reserved. Reserved keys: {RESERVED_FIELD_NAMES:?}."
         );
 
         match serde_json::to_value(value) {
