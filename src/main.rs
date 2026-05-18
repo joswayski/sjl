@@ -21,5 +21,5 @@ fn main() -> () {
     logger.debug("Debug", ());
     logger.info("Info", ());
     logger.warn("warn", ());
-    logger.error("error", ());
+    logger.error("erro this is a really long message can you check it?this is a really long message can you check it?this is a really long message can you check it?this is a really long message can you check it?this is a really long message can you check it?this is a really long message can you check it?this is a really long message can you check it?this is a really long message can you check it?", ());
 }
