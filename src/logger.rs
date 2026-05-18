@@ -167,13 +167,10 @@ impl Logger {
                         total_messages_count += 1;
 
                         // Check if the log that just came in made the vec grow
-                        // past a certain size and trim it down if it did.
-                        // This has to come after clear because shrink_to docs:
-                        // `The capacity will remain at least as large as both the length and the supplied value`
-                        // So if we shrink first with items still in it, it'll still be the size of the items inside
-                        // even though the capacity provided is smaller: max(len(), MAX_BUFFER_POOL_VECTOR_SIZE)
-                        // We could also drop the buffer here when it happens, the buffer pool size would shrink
-                        // by 1 and the we'd just get new Vec<u8>'s when/if we run out in the producer
+                        // past a certain size and:
+                        // 1. Log a warning
+                        // 2. trim it down if it did.
+
                         if log_buffer.capacity() > buffer_pool_max_capacity {
                             let log_was_oversized = log_buffer.len() > buffer_pool_max_capacity;
 
@@ -223,7 +220,12 @@ impl Logger {
 
                         // Clear the buffer
                         log_buffer.clear();
-                        // And shrink any that has grown past the max threshold since they double each time
+                        // This has to come after clear() because shrink_to docs:
+                        // `The capacity will remain at least as large as both the length and the supplied value`
+                        // So if we shrink first with items still in it, it'll still be the size of the items inside
+                        // even though the capacity provided is smaller: max(len(), MAX_BUFFER_POOL_VECTOR_SIZE)
+                        // We could also drop the buffer here when it happens, the buffer pool size would shrink
+                        // by 1 and the we'd just get new Vec<u8>'s when/if we run out in the producer
                         log_buffer.shrink_to(buffer_pool_initial_capacity);
                         // and return it to the pool
                         let _ = buffer_pool.push(log_buffer);
