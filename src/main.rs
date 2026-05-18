@@ -16,7 +16,10 @@ enum Status {
 fn main() -> () {
     // or..
 
-    let logger = Logger::builder().context("level", "shipments").init();
+    let logger = Logger::builder()
+        .context("beans", "shipments")
+        .context("beans", "poop")
+        .init();
 
     logger.debug("Debug", ());
     logger.info("Info", ());

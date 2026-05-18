@@ -9,7 +9,7 @@ use std::{
 
 use crossbeam_queue::ArrayQueue;
 use serde::Serialize;
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, map::Entry};
 
 use crate::{Logger, log_level::LogLevel};
 
@@ -61,10 +61,17 @@ impl Default for LoggerOptions {
 }
 
 impl LoggerOptions {
-    // Sets a key, value pair that will be added to all of the logs that are produced
+    /// Sets a key, value pair that will be added to all of the logs that are produced
+    /// All keys are normalized (lowercased, trimmed, stripped of any symbols)
     #[must_use = "call `.init()` to create a Logger"]
     pub fn context<V: Serialize>(mut self, key: impl Into<String>, value: V) -> Self {
-        let key = key.into();
+        let mut key = key.into();
+        key.make_ascii_lowercase();
+        let key = key.trim_end().to_owned();
+        assert!(
+            !key.is_empty(),
+            "context key '{key}' is empty after normalization. The keys are lowercased and trimmed before they are attached to the logs"
+        );
         assert!(
             !RESERVED_FIELD_NAMES.contains(&key.as_str()),
             "context key '{key}' is reserved. Reserved keys: {RESERVED_FIELD_NAMES:?}."
@@ -72,9 +79,21 @@ impl LoggerOptions {
 
         match serde_json::to_value(value) {
             // If it's serializable to an object, all is good
-            Ok(value) => {
-                self.context.insert(key, value);
-            }
+            Ok(new_value) => match self.context.entry(key) {
+                Entry::Occupied(mut entry) => {
+                    eprintln!(
+                        "SJL_WARN: You have a duplicate key '{}' being set in .context() calls. '{}' was overridden with '{}'",
+                        entry.key(),
+                        entry.get(),
+                        new_value
+                    );
+
+                    entry.insert(new_value);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(new_value);
+                }
+            },
             // If we failed to parse, return an error
             Err(serialize_error) => {
                 eprintln!(
