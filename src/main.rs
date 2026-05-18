@@ -22,8 +22,4 @@ fn main() -> () {
     logger.info("Info", ());
     logger.warn("warn", ());
     logger.error("error", ());
-    logger.error(
-        format!("tomato soup {}", 12),
-        json!({"message": "from jose"}),
-    );
 }

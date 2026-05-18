@@ -17,8 +17,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-const OVERSIZED_LOG_PREVIEW_LENGTH: usize = 200;
-const OVERSIZED_LOG_RESET_WINDOW: Duration = Duration::from_hours(4);
+const OVERSIZED_LOG_PREVIEW_LENGTH: usize = 200; // todo allow override?
+const OVERSIZED_LOG_RESET_WINDOW: Duration = Duration::from_hours(4); // todo allow override?
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
@@ -174,36 +174,53 @@ impl Logger {
                         // We could also drop the buffer here when it happens, the buffer pool size would shrink
                         // by 1 and the we'd just get new Vec<u8>'s when/if we run out in the producer
                         if log_buffer.capacity() > buffer_pool_max_capacity {
-                            if oversized_messages_count == 0
-                                || oversized_messages_count.is_multiple_of(50)
+                            let log_was_oversized = log_buffer.len() > buffer_pool_max_capacity;
+
+                            // Check how many in the last N hours
+                            let percentage_of_oversized = (oversized_messages_count + 1) as f64
+                                / total_messages_count as f64
+                                * 100.0;
+
+                            // If 50% of our logs are oversized, give a warning every 1 in 5 logs
+                            // small minimum of 1000 to keep noise down right from the beginning
+                            let warn_every_n = match percentage_of_oversized {
+                                p if p > 50.0 && total_messages_count > 1000 => 5,
+                                p if p > 30.0 && total_messages_count > 1000 => 10,
+                                _ => 100, // Default to 1% of logs (1 in 100)
+                            };
+                            if log_was_oversized
+                                && (oversized_messages_count == 0 // Log a warning on first ocurrance or every 50
+                                || oversized_messages_count.is_multiple_of(warn_every_n))
                             {
+                                // If its an oversized string, we obviously don't want to log the whole thing
                                 let preview_len =
                                     log_buffer.len().min(OVERSIZED_LOG_PREVIEW_LENGTH);
-                                    
-                                // Log a warning on first ocurrance or every 50
-                                let log_preview = String::from_utf8_lossy(&log_buffer);
-                                let truncated: String = log_preview
-                                    .chars()
-                                    .take(OVERSIZED_LOG_PREVIEW_LENGTH)
-                                    .collect();
+                                let oversized_log_preview = // get the actual text
+                                    String::from_utf8_lossy(&log_buffer[..preview_len]);
 
-                                let percentage_of_oversized = (oversized_messages_count + 1) as f64
-                                    / total_messages_count as f64
-                                    * 100.0;
-                                let suffix = if log_preview.len() > OVERSIZED_LOG_PREVIEW_LENGTH {
-                                    format!("{}... ({} bytes total)", truncated, log_preview.len())
-                                } else {
-                                    String::new()
-                                };
+                                let truncation_note =
+                                    if log_buffer.len() > OVERSIZED_LOG_PREVIEW_LENGTH {
+                                        format!("... ({} bytes total)", log_buffer.len())
+                                    } else {
+                                        String::new()
+                                    };
                                 eprintln!(
-                                    "SJL_WARN: You appear to have some logs that are greater than your buffer_pool_max_capacity. Right now {:.2}% of total logs are oversized. Consider increasing the buffer_pool_initial_capacity value if you see this log a lot.  Log that triggered this: {suffix}",
-                                    percentage_of_oversized
+                                    "SJL_WARN: You have logs that are greater than your buffer_pool_max_capacity ({} bytes). \
+                                    This log was {} bytes. Right now {percentage_of_oversized:.2}% of total logs are oversized. \
+                                    Consider increasing the buffer_pool_initial_capacity value if you see this log a lot. \
+                                    Log that triggered this: {oversized_log_preview}{truncation_note}",
+                                    buffer_pool_max_capacity,
+                                    log_buffer.len()
                                 )
                             }
 
-                            oversized_messages_count += 1;
+                            if log_was_oversized {
+                                oversized_messages_count += 1;
+                            }
+
                             // Clear the buffer
                             log_buffer.clear();
+                            // And shrink any that has grown past the max threshold since they double each time
                             log_buffer.shrink_to(buffer_pool_initial_capacity);
                         }
 
