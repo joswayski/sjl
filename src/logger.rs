@@ -82,6 +82,10 @@ impl Logger {
             return;
         }
 
+        if self.sender.is_none() {
+            return;
+        }
+
         // Don't serialize the empty data: () in the log event to null, just skip it
         let data = if size_of::<CustomData>() == 0 {
             None
@@ -173,46 +177,47 @@ impl Logger {
                         if log_buffer.capacity() > buffer_pool_max_capacity {
                             let log_was_oversized = log_buffer.len() > buffer_pool_max_capacity;
 
-                            // Check how many in the last N hours
-                            let percentage_of_oversized = (oversized_messages_count + 1) as f64
-                                / total_messages_count as f64
-                                * 100.0;
+                            if log_was_oversized {
+                                oversized_messages_count += 1;
 
-                            // If 50% of our logs are oversized, give a warning every 1 in 5 logs
-                            // small minimum of 1000 to keep noise down right from the beginning
-                            let warn_every_n = match percentage_of_oversized {
-                                p if p > 50.0 && total_messages_count > 1000 => 5,
-                                p if p > 30.0 && total_messages_count > 1000 => 10,
-                                _ => 100, // Default to 1% of logs (1 in 100)
-                            };
-                            if log_was_oversized
-                                && (oversized_messages_count == 0 // Log a warning on first ocurrance or every N (set above)
-                                || oversized_messages_count.is_multiple_of(warn_every_n))
-                            {
-                                // If its an oversized string, we obviously don't want to log the whole thing
-                                let preview_len =
-                                    log_buffer.len().min(OVERSIZED_LOG_PREVIEW_LENGTH);
-                                let oversized_log_preview = // get the actual text
+                                // Check how many in the last N hours
+                                let percentage_of_oversized = oversized_messages_count as f64
+                                    / total_messages_count as f64
+                                    * 100.0;
+
+                                // If 50% of our logs are oversized, give a warning every 1 in 5 logs
+                                // small minimum of 1000 to keep noise down right from the beginning
+                                let warn_every_n = match percentage_of_oversized {
+                                    p if p > 50.0 && total_messages_count > 1000 => 5,
+                                    p if p > 30.0 && total_messages_count > 1000 => 10,
+                                    _ => 100, // Default to 1% of logs (1 in 100)
+                                };
+
+                                // Log a warning on first ocurrance or every N (set above)
+                                if oversized_messages_count == 1
+                                    || oversized_messages_count.is_multiple_of(warn_every_n)
+                                {
+                                    // If its an oversized string, we obviously don't want to log the whole thing
+                                    let preview_len =
+                                        log_buffer.len().min(OVERSIZED_LOG_PREVIEW_LENGTH);
+                                    let oversized_log_preview = // get the actual text
                                     String::from_utf8_lossy(&log_buffer[..preview_len]);
 
-                                let truncation_note =
-                                    if log_buffer.len() > OVERSIZED_LOG_PREVIEW_LENGTH {
-                                        format!("... ({} bytes total)", log_buffer.len())
-                                    } else {
-                                        String::new()
-                                    };
-                                eprintln!(
-                                    "SJL_WARN: You have logs that are greater than your buffer_pool_max_capacity ({} bytes). \
+                                    let truncation_note =
+                                        if log_buffer.len() > OVERSIZED_LOG_PREVIEW_LENGTH {
+                                            format!("... ({} bytes total)", log_buffer.len())
+                                        } else {
+                                            String::new()
+                                        };
+                                    eprintln!(
+                                        "SJL_WARN: You have logs that are greater than your buffer_pool_max_capacity ({} bytes). \
                                     This log was {} bytes. Right now {percentage_of_oversized:.2}% of total logs are oversized. \
                                     Consider increasing the buffer_pool_initial_capacity value if you see this log a lot. \
                                     Log that triggered this: {oversized_log_preview}{truncation_note}",
-                                    buffer_pool_max_capacity,
-                                    log_buffer.len()
-                                )
-                            }
-
-                            if log_was_oversized {
-                                oversized_messages_count += 1;
+                                        buffer_pool_max_capacity,
+                                        log_buffer.len()
+                                    )
+                                }
                             }
                         }
 
