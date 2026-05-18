@@ -14,10 +14,11 @@ use std::{
         atomic::Ordering,
         mpsc::{self, Receiver, RecvTimeoutError},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const OVERSIZED_LOG_PREVIEW_LENGTH: usize = 200;
+const OVERSIZED_LOG_RESET_WINDOW: Duration = Duration::from_hours(4);
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
@@ -143,14 +144,26 @@ impl Logger {
         // Spawn a dedicated thread for logs
         std::thread::spawn(move || {
             let mut batch = Vec::<u8>::with_capacity(flush_at_bytes);
-            let mut message_count: u16 = 0;
-            let mut oversized_count: usize = 0;
+            let mut batch_message_count: u16 = 0;
+            let mut oversized_messages_count: usize = 0;
+            let mut oversized_messages_window = Instant::now();
+            let mut total_messages_count: usize = 0;
 
             loop {
                 match worker.recv_timeout(flush_interval) {
                     Ok(mut log_buffer) => {
                         batch.extend_from_slice(&log_buffer);
-                        message_count += 1;
+                        batch_message_count += 1; // this resets per batch
+
+                        // Reset the window if its expired
+                        if oversized_messages_window.elapsed() > OVERSIZED_LOG_RESET_WINDOW {
+                            total_messages_count = 0;
+                            oversized_messages_count = 0;
+                            oversized_messages_window = Instant::now();
+                        }
+
+                        // this is global so that we can give a % of oversized logs
+                        total_messages_count += 1;
 
                         // Check if the log that just came in made the vec grow
                         // past a certain size and trim it down if it did.
@@ -161,8 +174,12 @@ impl Logger {
                         // We could also drop the buffer here when it happens, the buffer pool size would shrink
                         // by 1 and the we'd just get new Vec<u8>'s when/if we run out in the producer
                         if log_buffer.capacity() > buffer_pool_max_capacity {
-                            // TODO show percentage of logs oversized
-                            if oversized_count == 0 || oversized_count.is_multiple_of(50) {
+                            if oversized_messages_count == 0
+                                || oversized_messages_count.is_multiple_of(50)
+                            {
+                                let preview_len =
+                                    log_buffer.len().min(OVERSIZED_LOG_PREVIEW_LENGTH);
+                                    
                                 // Log a warning on first ocurrance or every 50
                                 let log_preview = String::from_utf8_lossy(&log_buffer);
                                 let truncated: String = log_preview
@@ -170,17 +187,21 @@ impl Logger {
                                     .take(OVERSIZED_LOG_PREVIEW_LENGTH)
                                     .collect();
 
+                                let percentage_of_oversized = (oversized_messages_count + 1) as f64
+                                    / total_messages_count as f64
+                                    * 100.0;
                                 let suffix = if log_preview.len() > OVERSIZED_LOG_PREVIEW_LENGTH {
                                     format!("{}... ({} bytes total)", truncated, log_preview.len())
                                 } else {
                                     String::new()
                                 };
                                 eprintln!(
-                                    "SJL_WARN: You appear to have some logs that are greater than your buffer_pool_max_capacity. Consider increasing the buffer_pool_initial_capacity value if you see this log a lot. Log that triggered this: {suffix}",
+                                    "SJL_WARN: You appear to have some logs that are greater than your buffer_pool_max_capacity. Right now {:.2}% of total logs are oversized. Consider increasing the buffer_pool_initial_capacity value if you see this log a lot.  Log that triggered this: {suffix}",
+                                    percentage_of_oversized
                                 )
                             }
 
-                            oversized_count += 1;
+                            oversized_messages_count += 1;
                             // Clear the buffer
                             log_buffer.clear();
                             log_buffer.shrink_to(buffer_pool_initial_capacity);
@@ -190,9 +211,10 @@ impl Logger {
                         let _ = buffer_pool.push(log_buffer);
 
                         // Happy path, flush logs
-                        if message_count >= flush_at_messages || batch.len() >= flush_at_bytes {
+                        if batch_message_count >= flush_at_messages || batch.len() >= flush_at_bytes
+                        {
                             Logger::flush(&mut batch);
-                            message_count = 0;
+                            batch_message_count = 0;
                         }
                     }
                     // Flush regardless of what happened, we might be shutting down
@@ -202,7 +224,7 @@ impl Logger {
                     }
                     Err(RecvTimeoutError::Timeout) => {
                         Logger::flush(&mut batch);
-                        message_count = 0;
+                        batch_message_count = 0;
                         // Don't break to keep the loop going
                     }
                 }
