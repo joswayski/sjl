@@ -67,7 +67,7 @@ impl LoggerOptions {
     pub fn context<V: Serialize>(mut self, key: impl Into<String>, value: V) -> Self {
         let mut key = key.into();
         key.make_ascii_lowercase();
-        let key = key.trim_end().to_owned();
+        let key = key.trim().to_owned();
         assert!(
             !key.is_empty(),
             "context key '{key}' is empty after normalization. The keys are lowercased and trimmed before they are attached to the logs"

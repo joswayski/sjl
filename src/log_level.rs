@@ -26,3 +26,23 @@ impl LogLevel {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_as_str() {
+        assert_eq!(LogLevel::Debug.as_str(), "debug");
+        assert_eq!(LogLevel::Info.as_str(), "info");
+        assert_eq!(LogLevel::Warn.as_str(), "warn");
+        assert_eq!(LogLevel::Error.as_str(), "error");
+    }
+
+    #[test]
+    fn test_severity() {
+        assert!(LogLevel::Debug.severity() < LogLevel::Info.severity());
+        assert!(LogLevel::Info.severity() < LogLevel::Warn.severity());
+        assert!(LogLevel::Warn.severity() < LogLevel::Error.severity());
+    }
+}
