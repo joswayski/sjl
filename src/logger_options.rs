@@ -2,7 +2,6 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc::{self},
     },
     time::Duration,
 };
@@ -17,6 +16,7 @@ pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 const DEFAULT_FLUSH_AT_BYTES: usize = 64 * 2048;
 const DEFAULT_FLUSH_AT_MESSAGES: u16 = 100;
+const DEFAULT_FLUSH_INTERVAL: Duration = Duration::from_secs(1);
 const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
 const DEFAULT_BUFFER_POOL_INITIAL_CAPACITY: usize = 2048;
 const DEFAULT_BUFFER_POOL_MAX_CAPACITY: usize = 20 * DEFAULT_BUFFER_POOL_INITIAL_CAPACITY;
@@ -35,7 +35,7 @@ pub struct LoggerOptions {
     pub(crate) buffer_pool_max_capacity: usize,
 
     // Behavior
-    pub(crate) context: Map<String, Value>, // ! TODO add reserved field names again
+    pub(crate) context: Map<String, Value>,
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: Option<&'static str>,
     pub(crate) timestamp_key: &'static str, // TODO allow overriding
@@ -49,7 +49,7 @@ impl Default for LoggerOptions {
             flush_at_bytes: DEFAULT_FLUSH_AT_BYTES,
             flush_at_messages: DEFAULT_FLUSH_AT_MESSAGES,
             min_level: LogLevel::Debug,
-            flush_interval: Duration::from_secs(1),
+            flush_interval: DEFAULT_FLUSH_INTERVAL,
             timestamp_format: None,
             timestamp_key: "timestamp",
             pretty: false,
@@ -273,5 +273,28 @@ impl LoggerOptions {
             sender: Some(sender),
             worker: Some(worker),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sets_defaults() {
+        let log_opts = LoggerOptions::default();
+        assert_eq!(log_opts.pretty, false);
+        assert_eq!(log_opts.min_level, LogLevel::Debug);
+        assert_eq!(log_opts.timestamp_key, "timestamp");
+        assert_eq!(log_opts.timestamp_format, None); // sets none
+
+        assert_eq!(log_opts.flush_interval, Duration::from_secs(1));
+        assert_eq!(log_opts.flush_at_bytes, 64 * 2048);
+        assert_eq!(log_opts.flush_at_messages, 100);
+
+        assert_eq!(log_opts.context.keys().len(), 0);
+        assert_eq!(log_opts.buffer_pool_size, 64);
+        assert_eq!(log_opts.buffer_pool_initial_capacity, 2 * 1024);
+        assert_eq!(log_opts.buffer_pool_max_capacity, 40 * 1024);
     }
 }
