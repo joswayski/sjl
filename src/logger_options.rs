@@ -210,13 +210,13 @@ impl LoggerOptions {
         self
     }
 
-    // /// Remap the timestamp key from `timestamp` to something else like `time`
-    // /// TODO!
-    // #[must_use = "call `.init()` to create a Logger"]
-    // pub fn timestamp_key(mut self, timestamp_key: &'static str) -> Self {
-    //     self.timestamp_key = timestamp_key;
-    //     self
-    // }
+    /// Remap the timestamp key from `timestamp` to something else like `time`
+    /// TODO!
+    #[must_use = "call `.init()` to create a Logger"]
+    pub fn timestamp_key(mut self, timestamp_key: &'static str) -> Self {
+        self.timestamp_key = timestamp_key;
+        self
+    }
 
     /// Whether to use multi-line JSON log lines. Default `false`
     #[must_use = "call `.init()` to create a Logger"]
@@ -298,11 +298,11 @@ mod tests {
 
     #[test]
     fn test_can_override_values() {
-        // todo timestamp key
         let log_opts = LoggerOptions::default()
             .pretty(true)
             .min_level(LogLevel::Error)
             .timestamp_format("%Y-%m")
+            .timestamp_key("poop")
             .flush_interval(Duration::from_secs(69420))
             .flush_at_bytes(69420)
             .flush_at_messages(69)
@@ -313,7 +313,7 @@ mod tests {
 
         assert_eq!(log_opts.pretty, true);
         assert_eq!(log_opts.min_level, LogLevel::Error);
-        // assert_eq!(log_opts.timestamp_key, "timestamp"); // TODO!
+        assert_eq!(log_opts.timestamp_key, "poop");
         assert_eq!(log_opts.timestamp_format, Some("%Y-%m")); // sets none
 
         assert_eq!(log_opts.flush_interval, Duration::from_secs(69420));
