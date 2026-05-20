@@ -180,3 +180,9 @@ With `.pretty(false)` or omitted (default), logs are output as single-line JSON:
 {"level":"WARN","tz":"2025-10-31T07:33:44.333Z","data":{"Shipped":{"tracking_number":"1Z999AA10123456784"}},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
 {"level":"ERROR","tz":"2025-10-31T07:33:44.333Z","data":{"error":"connection_failed","host":"db.example.com"},"environment": "production", "service": "order-api", "metadata": {"git_sha":"abc123f","instance_id":"i-1234567890abcdef0","pod_name":"order-api-7d4f8c9b5-x8k2p"}}
 ```
+
+
+### Running Tests
+```bash
+cargo llvm-cov --html -- --test-threads=1
+```

@@ -224,23 +224,31 @@ impl LoggerOptions {
         self
     }
 
+    fn validate(&mut self) {
+        assert!(
+            self.buffer_pool_initial_capacity <= self.buffer_pool_max_capacity,
+            "buffer_pool_initial_capacity ({}) must be <= buffer_pool_max_capacity ({})",
+            self.buffer_pool_initial_capacity,
+            self.buffer_pool_max_capacity
+        );
+
+        assert!(
+            !self.context.contains_key(self.timestamp_key),
+            "timestamp_key ({}) collides with a context key. Context keys show up at the top level with the timestamp, consider changing one of them",
+            self.timestamp_key
+        )
+    }
     // Initializes the logger and returns it
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(mut self) -> Logger {
-        // TODO asset that the timestamp key wont interfere with the custom fields
         assert!(
+            // this is outside of validate so testing is easier since the logger gets dropped
+            // when it goes outof scope
             !LOGGER_INITIALIZED.swap(true, Ordering::SeqCst),
             "Logger already initialized! Only call .init() once"
         );
 
-        if self.buffer_pool_initial_capacity > self.buffer_pool_max_capacity {
-            eprintln!(
-                "buffer_pool_max_capacity ({}) < buffer_pool_initial_capacity ({}); clamping max to capacity",
-                self.buffer_pool_max_capacity, self.buffer_pool_initial_capacity
-            );
-
-            self.buffer_pool_max_capacity = self.buffer_pool_initial_capacity;
-        }
+        self.validate();
 
         let (sender, worker) = crossbeam_channel::unbounded::<Vec<u8>>();
 
@@ -341,7 +349,46 @@ mod tests {
     #[test]
     #[should_panic(expected = "Logger already initialized")]
     fn test_cant_initialize_more_than_one() {
-        let _first: Logger = LoggerOptions::default().init();
-        let _second: Logger = LoggerOptions::default().init();
+        let _first = LoggerOptions::default().init();
+        let _second = LoggerOptions::default().init();
+    }
+
+    #[test]
+    #[should_panic(expected = "must be <=")]
+    fn test_buffer_pool_initial_capacity_less_than_buffer_pool_max_capacity() {
+        let mut opts = LoggerOptions::default()
+            .buffer_pool_initial_capacity(100)
+            .buffer_pool_max_capacity(20);
+
+        opts.validate();
+    }
+
+    #[test]
+    fn test_buffer_pool_sizes_are_valid() {
+        let mut opts = LoggerOptions::default()
+            .buffer_pool_initial_capacity(20)
+            .buffer_pool_max_capacity(100);
+
+        opts.validate();
+    }
+
+    #[test]
+    #[should_panic(expected = "is reserved. Reserved keys")]
+    fn test_setting_context_to_a_reserved_key() {
+        let mut opts = LoggerOptions::default().context("timestamp", "poop");
+
+        opts.validate();
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "collides with a context key. Context keys show up at the top level with the timestamp, consider changing one of them"
+    )]
+    fn test_timestmap_key_collision_with_context() {
+        let mut opts = LoggerOptions::default()
+            .context("custom_timestamp", "poop")
+            .timestamp_key("custom_timestamp");
+
+        opts.validate();
     }
 }
