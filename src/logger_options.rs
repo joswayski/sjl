@@ -151,10 +151,8 @@ impl LoggerOptions {
         self
     }
 
-    /// How big each log is. This is used to preallocate buffers in a pool so they can be reused.
-    /// There is also a `buffer_pool_max_capacity` which will trim Vec<u8>'s back down
-    /// if they get resized over the limit.
-    /// Set this to your estimate of how big your logs are
+    /// Initial byte capacity for each buffer in the pool.
+    /// Set this to your estimate of how big your logs are so that the common case avoids reallocations.
     /// Default is 2kb.
     #[must_use = "call `.init()` to create a Logger"]
     pub fn buffer_pool_initial_capacity(mut self, buffer_pool_initial_capacity: usize) -> Self {
@@ -235,7 +233,7 @@ impl LoggerOptions {
             "Logger already initialized! Only call .init() once"
         );
 
-        if self.buffer_pool_initial_capacity >= self.buffer_pool_max_capacity {
+        if self.buffer_pool_initial_capacity > self.buffer_pool_max_capacity {
             eprintln!(
                 "buffer_pool_max_capacity ({}) < buffer_pool_initial_capacity ({}); clamping max to capacity",
                 self.buffer_pool_max_capacity, self.buffer_pool_initial_capacity
@@ -296,5 +294,35 @@ mod tests {
         assert_eq!(log_opts.buffer_pool_size, 64);
         assert_eq!(log_opts.buffer_pool_initial_capacity, 2 * 1024);
         assert_eq!(log_opts.buffer_pool_max_capacity, 40 * 1024);
+    }
+
+    #[test]
+    fn test_can_override_values() {
+        // todo timestamp key
+        let log_opts = LoggerOptions::default()
+            .pretty(true)
+            .min_level(LogLevel::Error)
+            .timestamp_format("%Y-%m")
+            .flush_interval(Duration::from_secs(69420))
+            .flush_at_bytes(69420)
+            .flush_at_messages(69)
+            .context("69", "420")
+            .buffer_pool_size(69420)
+            .buffer_pool_initial_capacity(69420)
+            .buffer_pool_max_capacity(69420);
+
+        assert_eq!(log_opts.pretty, true);
+        assert_eq!(log_opts.min_level, LogLevel::Error);
+        // assert_eq!(log_opts.timestamp_key, "timestamp"); // TODO!
+        assert_eq!(log_opts.timestamp_format, Some("%Y-%m")); // sets none
+
+        assert_eq!(log_opts.flush_interval, Duration::from_secs(69420));
+        assert_eq!(log_opts.flush_at_bytes, 69420);
+        assert_eq!(log_opts.flush_at_messages, 69);
+
+        assert_eq!(log_opts.context.keys().len(), 1);
+        assert_eq!(log_opts.buffer_pool_size, 69420);
+        assert_eq!(log_opts.buffer_pool_initial_capacity, 69420);
+        assert_eq!(log_opts.buffer_pool_max_capacity, 69420);
     }
 }
