@@ -417,4 +417,35 @@ mod tests {
             Some("Valerio")
         );
     }
+
+    #[test]
+    fn test_uses_default_flush_at_bytes_if_0() {
+        let ops = LoggerOptions::default().flush_at_bytes(0);
+
+        assert_eq!(ops.flush_at_bytes, 64 * 2048);
+    }
+
+    #[test]
+    fn test_uses_default_flush_at_messages_if_0() {
+        let ops = LoggerOptions::default().flush_at_messages(0);
+        assert_eq!(ops.flush_at_messages, 100);
+    }
+
+    #[test]
+    fn test_uses_default_buffer_pool_size_if_0() {
+        let ops = LoggerOptions::default().buffer_pool_size(0);
+        assert_eq!(ops.buffer_pool_size, 64);
+    }
+
+    #[test]
+    fn test_uses_default_buffer_pool_initial_capacity_if_0() {
+        let ops = LoggerOptions::default().buffer_pool_initial_capacity(0);
+        assert_eq!(ops.buffer_pool_initial_capacity, 2048);
+    }
+
+    #[test]
+    fn test_uses_default_buffer_pool_max_capacity_if_0() {
+        let ops = LoggerOptions::default().buffer_pool_max_capacity(0);
+        assert_eq!(ops.buffer_pool_max_capacity, 20 * 2048);
+    }
 }
