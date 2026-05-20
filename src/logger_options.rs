@@ -17,10 +17,10 @@ pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 const DEFAULT_FLUSH_AT_BYTES: usize = 64 * 2048;
 const DEFAULT_FLUSH_AT_MESSAGES: usize = 100;
 const DEFAULT_FLUSH_INTERVAL: Duration = Duration::from_secs(1);
-const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
+const DEFAULT_BUFFER_POOL_SIZE: usize = 10;
 const DEFAULT_BUFFER_POOL_INITIAL_CAPACITY: usize = 2048;
 const DEFAULT_BUFFER_POOL_MAX_CAPACITY: usize = 20 * DEFAULT_BUFFER_POOL_INITIAL_CAPACITY;
-const RESERVED_FIELD_NAMES: &[&str; 4] = &["timestamp", "level", "message", "data"];
+const RESERVED_FIELD_NAMES: &[&str; 3] = &["level", "message", "data"];
 
 #[must_use = "LoggerOptions does nothing until you call `.init()`"]
 pub struct LoggerOptions {
@@ -62,16 +62,11 @@ impl Default for LoggerOptions {
 
 impl LoggerOptions {
     /// Sets a key, value pair that will be added to all of the logs that are produced
-    /// All keys are normalized (lowercased, trimmed, stripped of any symbols)
+    /// Keys must be non-empty and not in the reserved set of (`level`, `message`, `data`)
     #[must_use = "call `.init()` to create a Logger"]
     pub fn context<V: Serialize>(mut self, key: impl Into<String>, value: V) -> Self {
-        let mut key = key.into();
-        key.make_ascii_lowercase();
-        let key = key.trim().to_owned();
-        assert!(
-            !key.is_empty(),
-            "context key '{key}' is empty after normalization. The keys are lowercased and trimmed before they are attached to the logs"
-        );
+        let key = key.into();
+        assert!(!key.trim().is_empty(), "context key '{key}' is empty.");
         assert!(
             !RESERVED_FIELD_NAMES.contains(&key.as_str()),
             "context key '{key}' is reserved. Reserved keys: {RESERVED_FIELD_NAMES:?}."
@@ -106,7 +101,7 @@ impl LoggerOptions {
         self
     }
 
-    /// How many bytes to buffer before flushing. Default is `DEFAULT_FLUSH_AT_BYTES`
+    /// How many bytes to buffer before flushing. Default is 128 KiB
     #[must_use = "call `.init()` to create a Logger"]
     pub fn flush_at_bytes(mut self, flush_at_bytes: usize) -> Self {
         if flush_at_bytes == 0 {
@@ -120,7 +115,7 @@ impl LoggerOptions {
         self
     }
 
-    /// How many messages to hold in memory before flushing. Default is `DEFAULT_FLUSH_AT_MESSAGES`
+    /// How many messages to hold in memory before flushing. Default is 100
     #[must_use = "call `.init()` to create a Logger"]
     pub fn flush_at_messages(mut self, flush_at_messages: usize) -> Self {
         if flush_at_messages == 0 {
@@ -137,7 +132,7 @@ impl LoggerOptions {
     /// How big the initial buffer pool should be to avoid new allocations per log
     /// This creates a buffer pool of Vec<u8> that are reused.
     /// Set this to your estimate of concurrent inflight logs for your application.
-    /// Default is 64.
+    /// Default is 10.
     #[must_use = "call `.init()` to create a Logger"]
     pub fn buffer_pool_size(mut self, buffer_pool_size: usize) -> Self {
         if buffer_pool_size == 0 {
@@ -168,7 +163,8 @@ impl LoggerOptions {
     }
 
     /// The absolute max size a buffer can grow to before being shrunk
-    /// If you're hitting this often, it might be good to increase the `buffer_pool_initial_capacity`
+    /// If you're hitting this often, it might be good to increase the `buffer_pool_initial_capacity`.
+    /// Default is 40 KiB
     #[must_use = "call `.init()` to create a Logger"]
     pub fn buffer_pool_max_capacity(mut self, buffer_pool_max_capacity: usize) -> Self {
         if buffer_pool_max_capacity == 0 {
@@ -203,6 +199,7 @@ impl LoggerOptions {
     /// Use these guides as reference:
     /// <https://docs.rs/chrono/latest/chrono/#formatting-and-parsing> &
     /// <https://docs.rs/chrono/latest/chrono/format/strftime/index.html#specifiers>
+    /// Default is RFC 3339 with millisecond precision (2024-01-15T14:30:00.123Z)
     #[must_use = "call `.init()` to create a Logger"]
     pub fn timestamp_format(mut self, timestamp_format: &'static str) -> Self {
         self.timestamp_format = Some(timestamp_format);
@@ -211,6 +208,7 @@ impl LoggerOptions {
     }
 
     /// Remap the timestamp key from `timestamp` to something else like `time`
+    /// Default is `timestamp`
     #[must_use = "call `.init()` to create a Logger"]
     pub fn timestamp_key(mut self, timestamp_key: &'static str) -> Self {
         self.timestamp_key = timestamp_key;
@@ -227,14 +225,14 @@ impl LoggerOptions {
     fn validate(&mut self) {
         assert!(
             self.buffer_pool_initial_capacity <= self.buffer_pool_max_capacity,
-            "buffer_pool_initial_capacity ({}) must be <= buffer_pool_max_capacity ({})",
+            "buffer_pool_initial_capacity '{}' must be <= buffer_pool_max_capacity '{}'",
             self.buffer_pool_initial_capacity,
             self.buffer_pool_max_capacity
         );
 
         assert!(
             !self.context.contains_key(self.timestamp_key),
-            "timestamp_key ({}) collides with a context key. Context keys show up at the top level with the timestamp, consider changing one of them",
+            "timestamp_key '{}' collides with a context key. Context keys show up at the top level with the timestamp, consider changing one of them",
             self.timestamp_key
         )
     }
@@ -300,7 +298,7 @@ mod tests {
         assert_eq!(log_opts.flush_at_messages, 100);
 
         assert_eq!(log_opts.context.keys().len(), 0);
-        assert_eq!(log_opts.buffer_pool_size, 64);
+        assert_eq!(log_opts.buffer_pool_size, 10);
         assert_eq!(log_opts.buffer_pool_initial_capacity, 2 * 1024);
         assert_eq!(log_opts.buffer_pool_max_capacity, 40 * 1024);
     }
@@ -393,14 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn test_lowercases_and_trims_context_keys() {
-        let ops = LoggerOptions::default().context("  BEANS  ", "true");
-
-        assert!(ops.context.contains_key("beans"));
-    }
-
-    #[test]
-    #[should_panic(expected = "is empty after normalization")]
+    #[should_panic(expected = " is empty.")]
     fn test_no_empty_context_keys_after_normalization() {
         let _ = LoggerOptions::default().context("     ", true);
     }
@@ -434,7 +425,7 @@ mod tests {
     #[test]
     fn test_uses_default_buffer_pool_size_if_0() {
         let ops = LoggerOptions::default().buffer_pool_size(0);
-        assert_eq!(ops.buffer_pool_size, 64);
+        assert_eq!(ops.buffer_pool_size, 10);
     }
 
     #[test]
