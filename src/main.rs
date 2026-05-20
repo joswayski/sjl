@@ -19,6 +19,7 @@ fn main() -> () {
     let logger = Logger::builder()
         .context("beans", "shipments")
         .context("beans", "poop")
+        .timestamp_key("poop")
         .init();
 
     logger.debug("Debug", ());

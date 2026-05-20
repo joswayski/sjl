@@ -27,6 +27,7 @@ pub struct Logger {
     // Options
     pub(crate) min_level: LogLevel,
     pub(crate) timestamp_format: Option<&'static str>,
+    pub(crate) timestamp_key: &'static str,
     pub(crate) context: Map<String, Value>,
     pub(crate) pretty: bool,
 }
@@ -96,8 +97,8 @@ impl Logger {
         let log_event = LogEvent {
             context: &self.context,
             level: log_level.as_str(),
-            // TODO custom timestamp key with custom serialize impl
             timestamp: FormattedTimestamp::new(self.timestamp_format),
+            timestamp_key: self.timestamp_key,
             data,
             message: message.as_ref(),
         };

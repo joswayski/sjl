@@ -211,7 +211,6 @@ impl LoggerOptions {
     }
 
     /// Remap the timestamp key from `timestamp` to something else like `time`
-    /// TODO!
     #[must_use = "call `.init()` to create a Logger"]
     pub fn timestamp_key(mut self, timestamp_key: &'static str) -> Self {
         self.timestamp_key = timestamp_key;
@@ -266,6 +265,7 @@ impl LoggerOptions {
             buffer_pool,
             buffer_pool_initial_capacity: self.buffer_pool_initial_capacity,
             timestamp_format: self.timestamp_format,
+            timestamp_key: self.timestamp_key,
             pretty: self.pretty,
             context: self.context,
             sender: Some(sender),
