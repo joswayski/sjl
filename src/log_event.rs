@@ -78,7 +78,7 @@ mod tests {
             level: LogLevel::Info.as_str(),
             message: "Saul Goodman",
             timestamp: ts,
-            timestamp_key: "timestamp",
+            timestamp_key: "poop",
             data: Some(&json!({"sample_key": "sample_data"})),
             context: &test_map,
         };
@@ -92,12 +92,28 @@ mod tests {
         assert!(result.contains("\"test_map\":\"test_value\""));
         assert!(parsed_result["data"].is_object());
         assert_eq!(parsed_result["data"]["sample_key"], "sample_data");
-        assert!(parsed_result["timestamp"].as_str().unwrap().ends_with("Z"));
+        assert!(parsed_result["poop"].as_str().unwrap().ends_with("Z"));
 
         println!("{}", parsed_result);
         assert_eq!(
             parsed_result["user"]["user_type"]["Admin"]["access"],
             "full"
         );
+    }
+
+    #[test]
+    fn test_omits_custom_data_when_none() {
+        let event: LogEvent<()> = LogEvent {
+            level: LogLevel::Info.as_str(),
+            message: "Saul Goodman",
+            timestamp: FormattedTimestamp::new(None),
+            data: None,
+            context: &Map::new(),
+            timestamp_key: "timestamp",
+        };
+
+        let result = serde_json::to_string(&event).unwrap();
+        let parsed_result: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed_result.get("data").is_none())
     }
 }
