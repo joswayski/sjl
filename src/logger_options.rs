@@ -391,4 +391,30 @@ mod tests {
 
         opts.validate();
     }
+
+    #[test]
+    fn test_lowercases_and_trims_context_keys() {
+        let ops = LoggerOptions::default().context("  BEANS  ", "true");
+
+        assert!(ops.context.contains_key("beans"));
+    }
+
+    #[test]
+    #[should_panic(expected = "is empty after normalization")]
+    fn test_no_empty_context_keys_after_normalization() {
+        let _ = LoggerOptions::default().context("     ", true);
+    }
+
+    #[test]
+    fn test_overrides_duplicate_context_keys() {
+        let ops = LoggerOptions::default()
+            .context("name", "Jose")
+            .context("name", "Valerio");
+
+        assert_eq!(ops.context.keys().len(), 1);
+        assert_eq!(
+            ops.context.get("name").and_then(|v| v.as_str()),
+            Some("Valerio")
+        );
+    }
 }
