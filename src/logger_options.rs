@@ -373,7 +373,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "is reserved. Reserved keys")]
     fn test_setting_context_to_a_reserved_key() {
-        let mut opts = LoggerOptions::default().context("timestamp", "poop");
+        let mut opts = LoggerOptions::default().context("data", "poop");
 
         opts.validate();
     }
