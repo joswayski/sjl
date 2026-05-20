@@ -15,7 +15,7 @@ use crate::{Logger, log_level::LogLevel};
 pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 const DEFAULT_FLUSH_AT_BYTES: usize = 64 * 2048;
-const DEFAULT_FLUSH_AT_MESSAGES: u16 = 100;
+const DEFAULT_FLUSH_AT_MESSAGES: usize = 100;
 const DEFAULT_FLUSH_INTERVAL: Duration = Duration::from_secs(1);
 const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
 const DEFAULT_BUFFER_POOL_INITIAL_CAPACITY: usize = 2048;
@@ -26,7 +26,7 @@ const RESERVED_FIELD_NAMES: &[&str; 4] = &["timestamp", "level", "message", "dat
 pub struct LoggerOptions {
     // Batching
     pub(crate) flush_at_bytes: usize,
-    pub(crate) flush_at_messages: u16,
+    pub(crate) flush_at_messages: usize,
     pub(crate) flush_interval: Duration,
 
     // Buffer pool
@@ -122,7 +122,7 @@ impl LoggerOptions {
 
     /// How many messages to hold in memory before flushing. Default is `DEFAULT_FLUSH_AT_MESSAGES`
     #[must_use = "call `.init()` to create a Logger"]
-    pub fn flush_at_messages(mut self, flush_at_messages: u16) -> Self {
+    pub fn flush_at_messages(mut self, flush_at_messages: usize) -> Self {
         if flush_at_messages == 0 {
             eprintln!(
                 "Provided 'flush_at_messages' is invalid, using {}",

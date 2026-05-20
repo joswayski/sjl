@@ -140,13 +140,13 @@ impl Logger {
         buffer_pool_max_capacity: usize,
         buffer_pool_initial_capacity: usize,
         flush_at_bytes: usize,
-        flush_at_messages: u16,
+        flush_at_messages: usize,
         flush_interval: Duration,
     ) -> std::thread::JoinHandle<()> {
         // Spawn a dedicated thread for logs
         std::thread::spawn(move || {
             let mut batch = Vec::<u8>::with_capacity(flush_at_bytes);
-            let mut batch_message_count: u16 = 0;
+            let mut batch_message_count: usize = 0;
             let mut oversized_messages_count: usize = 0;
             let mut oversized_messages_window = Instant::now();
             let mut total_messages_count: usize = 0;
