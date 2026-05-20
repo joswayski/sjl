@@ -227,6 +227,7 @@ impl LoggerOptions {
     // Initializes the logger and returns it
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(mut self) -> Logger {
+        // TODO asset that the timestamp key wont interfere with the custom fields
         assert!(
             !LOGGER_INITIALIZED.swap(true, Ordering::SeqCst),
             "Logger already initialized! Only call .init() once"
@@ -324,5 +325,23 @@ mod tests {
         assert_eq!(log_opts.buffer_pool_size, 69420);
         assert_eq!(log_opts.buffer_pool_initial_capacity, 69420);
         assert_eq!(log_opts.buffer_pool_max_capacity, 69420);
+    }
+
+    #[test]
+    fn test_init_happy_path() {
+        let logger = LoggerOptions::default().init();
+
+        assert_eq!(logger.pretty, false);
+        assert_eq!(logger.min_level, LogLevel::Debug);
+        assert_eq!(logger.timestamp_key, "timestamp");
+        assert_eq!(logger.timestamp_format, None); // sets none
+    }
+
+    // cargo test -- --test-threads=1
+    #[test]
+    #[should_panic(expected = "Logger already initialized")]
+    fn test_cant_initialize_more_than_one() {
+        let _first: Logger = LoggerOptions::default().init();
+        let _second: Logger = LoggerOptions::default().init();
     }
 }
