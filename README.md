@@ -38,7 +38,7 @@ fn main() {
 ## Extended Usage / Raison d'être
 ```rust
 use serde::Serialize;
-use sjl::{LoggerOptions};
+use sjl::LoggerOptions;
 
 #[derive(Serialize)] // <-- All you need!
 struct User {
@@ -175,4 +175,3 @@ fn main() {
 ```bash
 cargo llvm-cov --html
 ```
-> Tests run single threaded because only one logger can exist at a time. Parallel tests 

@@ -328,7 +328,6 @@ mod tests {
         assert_eq!(logger.timestamp_format, None); // sets none
     }
 
-    // cargo test -- --test-threads=1
     #[test]
     fn test_can_init_more_than_once() {
         let a = LoggerOptions::default().min_level(LogLevel::Debug).init();
