@@ -26,13 +26,13 @@ use sjl::Logger;
 fn main() {
     let logger = Logger::new();
 
-    logger.info("Hello", ()); // 2nd param is optional data
+    logger.info("Saul Goodman", ()); // 2nd param is optional data
 }
 ```
 
 ### Outputs
 ```json
-{"timestamp":"2026-05-21T02:45:03.456Z","level":"info","message":"Hello"}
+{"timestamp":"2026-05-21T02:45:03.456Z","level":"info","message":"Saul Goodman"}
 ```
 
 ## Extended Usage / Raison d'être
