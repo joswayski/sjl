@@ -3,7 +3,7 @@
  📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
 
 ## What
-It's a Simple JSON Logger. It logs JSON to stdout.
+It's a Simple JSON Logger. It logs JSON.
 
 
 ## Why?
@@ -79,7 +79,6 @@ fn main() {
     };
 
     logger.info("Saul Goodman!", &user);
-    logger.info("Or even JSON", json!({"user": &user}));
 }
 ```
 

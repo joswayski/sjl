@@ -266,10 +266,11 @@ impl Logger {
             return;
         }
 
-        let mut stdout = std::io::stdout().lock();
+        // todo make this configurable
+        let mut out = std::io::stderr().lock();
 
-        let _ = stdout.write_all(batch);
-        let _ = stdout.flush();
+        let _ = out.write_all(batch);
+        let _ = out.flush();
 
         batch.clear();
     }
