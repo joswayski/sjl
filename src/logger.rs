@@ -82,6 +82,10 @@ impl Logger {
         message: impl AsRef<str>,
         custom_data: CustomData,
     ) {
+        if !self.should_log(log_level) {
+            return;
+        }
+
         if self.sender.is_none() {
             return;
         }

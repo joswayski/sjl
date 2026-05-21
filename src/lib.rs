@@ -8,3 +8,4 @@ mod log_level;
 mod timestamp;
 pub use log_level::LogLevel;
 mod logger_options;
+pub use logger_options::LoggerOptions;
