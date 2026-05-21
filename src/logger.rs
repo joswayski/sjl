@@ -268,7 +268,6 @@ impl Logger {
 
         // todo make this configurable
         let mut out = std::io::stderr().lock();
-
         let _ = out.write_all(batch);
         let _ = out.flush();
 
