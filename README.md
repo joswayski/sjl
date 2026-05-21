@@ -3,7 +3,7 @@
  📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
 
 ## What
-It's a Simple JSON Logger. It logs JSON.
+It's a Simple JSON Logger. It logs JSON to `stderr`.
 
 
 ## Why?
@@ -91,10 +91,11 @@ fn main() {
   "data": {
     "name": "Jose",
     "cars": [
+    // No escaped strings!
       {
         "make": "Toyota",
         "model": "Rav4",
-        "transmission": "Manual"
+        "transmission": "Manual" // Enums render normally
       },
       {
         "make": "Tesla",
@@ -102,28 +103,6 @@ fn main() {
         "transmission": "Automatic"
       }
     ]
-  }
-}
-{
-  "timestamp": "2026-05-21T03:39:36.780Z",
-  "level": "info",
-  "message": "Or even JSON",
-  "data": {
-    "user": {
-      "cars": [
-        {
-          "make": "Toyota",
-          "model": "Rav4",
-          "transmission": "Manual"
-        },
-        {
-          "make": "Tesla",
-          "model": "Cybertruck",
-          "transmission": "Automatic"
-        }
-      ],
-      "name": "Jose"
-    }
   }
 }
 ```
