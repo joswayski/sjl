@@ -21,9 +21,9 @@ impl<'a, Data: Serialize> Serialize for LogEvent<'a, Data> {
         let len = 3 + self.context.len() + self.data.is_some() as usize;
         let mut map = serializer.serialize_map(Some(len))?;
 
-        map.serialize_entry(self.timestamp_key, &self.timestamp);
-        map.serialize_entry("level", self.level);
-        map.serialize_entry("message", self.message);
+        map.serialize_entry(self.timestamp_key, &self.timestamp)?;
+        map.serialize_entry("level", self.level)?;
+        map.serialize_entry("message", self.message)?;
 
         // Flatten context keys
         for (k, v) in self.context {

@@ -36,7 +36,7 @@ fn main() {
 ## Extended Usage / Raison d'être
 ```rust
 use serde::Serialize;
-use sjl::LoggerOptions;
+use sjl::{LoggerOptions, json};
 
 #[derive(Serialize)] // <-- All you need!
 struct User {
@@ -77,23 +77,23 @@ fn main() {
     };
 
     logger.info("Saul Goodman!", &user);
+    logger.info("Or even JSON", json!({"user": &user}));
 }
 ```
 
 ### Outputs
 ```bash
 {
-  "timestamp": "2026-05-21T03:18:08.576Z",
+  "timestamp": "2026-05-21T03:39:36.780Z",
   "level": "info",
   "message": "Saul Goodman!",
   "data": {
     "name": "Jose",
     "cars": [
-      // No excaped strings!
       {
         "make": "Toyota",
         "model": "Rav4",
-        "transmission": "Manual" // Normal rendering of enums!
+        "transmission": "Manual"
       },
       {
         "make": "Tesla",
@@ -101,6 +101,28 @@ fn main() {
         "transmission": "Automatic"
       }
     ]
+  }
+}
+{
+  "timestamp": "2026-05-21T03:39:36.780Z",
+  "level": "info",
+  "message": "Or even JSON",
+  "data": {
+    "user": {
+      "cars": [
+        {
+          "make": "Toyota",
+          "model": "Rav4",
+          "transmission": "Manual"
+        },
+        {
+          "make": "Tesla",
+          "model": "Cybertruck",
+          "transmission": "Automatic"
+        }
+      ],
+      "name": "Jose"
+    }
   }
 }
 ```
@@ -118,7 +140,7 @@ fn main() {
         // Heirarchy: Debug < Info < Warn < Error
         .min_level(LogLevel::Warn)
         // Batching
-        // Flush once the batch reachis this many bytes
+        // Flush once the batch reaches this many bytes
         .flush_at_bytes(1_000)
         // ...or once we have this many messages
         .flush_at_messages(100)
@@ -141,7 +163,7 @@ fn main() {
         .timestamp_key("time")
         // Custom chrono  strftime format. Default is RFC 3339 with milliseconds.
         // Build your own from here: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-        .timestamp_format("%FT%I-%M-%S%p")
+        .timestamp_format("%FT%I:%M:%S%p")
         // Pretty-print JSON using multiple lines. Default is compact, single line.
         .pretty(true)
         // Spawns a background worker thread and returns the logger. Only call this once or it'll panic.
@@ -155,7 +177,7 @@ fn main() {
 ### Outputs
 ```bash
 {
-  "time": "2026-05-21T03-09-14AM",
+  "time": "2026-05-21T03:35:04AM",
   "level": "error",
   "message": "Saul Goodman!",
   "environment": "production",

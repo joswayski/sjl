@@ -138,7 +138,7 @@ impl Logger {
     }
 
     fn warn_every_n(pct_oversized: f64, total_messages_count: usize) -> usize {
-        // If 50% of our logs are oversized, give a warning every 1 in 100 logs
+        // If 50% of our logs are oversized, give a warning every 1 in 200 logs
         // small minimum of 1000 to keep noise down right from the beginning
         match pct_oversized {
             p if p > 50.0 && total_messages_count > 1000 => 200,
