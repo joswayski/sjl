@@ -1,7 +1,5 @@
 use crate::{
-    log_event::LogEvent,
-    log_level::LogLevel,
-    logger_options::{LOGGER_INITIALIZED, LoggerOptions},
+    log_event::LogEvent, log_level::LogLevel, logger_options::LoggerOptions,
     timestamp::FormattedTimestamp,
 };
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
@@ -10,7 +8,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
     io::Write,
-    sync::{Arc, atomic::Ordering},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -47,9 +45,6 @@ impl Drop for Logger {
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
-
-        // Let other creations happen once dropped
-        let _ = LOGGER_INITIALIZED.swap(false, Ordering::SeqCst);
     }
 }
 

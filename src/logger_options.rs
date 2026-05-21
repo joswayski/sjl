@@ -1,18 +1,10 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use crossbeam_queue::ArrayQueue;
 use serde::Serialize;
 use serde_json::{Map, Value, map::Entry};
 
 use crate::{Logger, log_level::LogLevel};
-
-pub static LOGGER_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 const DEFAULT_FLUSH_AT_BYTES: usize = 64 * 2048;
 const DEFAULT_FLUSH_AT_MESSAGES: usize = 100;
@@ -239,13 +231,6 @@ impl LoggerOptions {
     // Initializes the logger and returns it
     #[must_use = "Logger must be kept to write logs. For example: logger.info()"]
     pub fn init(mut self) -> Logger {
-        assert!(
-            // this is outside of validate so testing is easier since the logger gets dropped
-            // when it goes outof scope
-            !LOGGER_INITIALIZED.swap(true, Ordering::SeqCst),
-            "Logger already initialized! Only call .init() once"
-        );
-
         self.validate();
 
         let (sender, worker) = crossbeam_channel::unbounded::<Vec<u8>>();
@@ -345,10 +330,12 @@ mod tests {
 
     // cargo test -- --test-threads=1
     #[test]
-    #[should_panic(expected = "Logger already initialized")]
-    fn test_cant_initialize_more_than_one() {
-        let _first = LoggerOptions::default().init();
-        let _second = LoggerOptions::default().init();
+    fn test_can_init_more_than_once() {
+        let a = LoggerOptions::default().min_level(LogLevel::Debug).init();
+        let b = LoggerOptions::default().min_level(LogLevel::Error).init();
+
+        assert_eq!(a.min_level, LogLevel::Debug);
+        assert_eq!(b.min_level, LogLevel::Error);
     }
 
     #[test]

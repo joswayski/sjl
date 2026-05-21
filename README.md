@@ -1,6 +1,6 @@
 # sjl - Simple JSON Logger
 
- 📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
+📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
 
 ## What
 It's a Simple JSON Logger. It logs JSON to `stderr`.
@@ -15,7 +15,7 @@ If you just want a Simple JSON Logger, you might find this useful.
 
  ## Installation
 
- ```json
+ ```bash
  cargo add sjl
  ```
 
@@ -38,7 +38,7 @@ fn main() {
 ## Extended Usage / Raison d'être
 ```rust
 use serde::Serialize;
-use sjl::{LoggerOptions, json};
+use sjl::{LoggerOptions};
 
 #[derive(Serialize)] // <-- All you need!
 struct User {
@@ -109,6 +109,9 @@ fn main() {
 
 ## All Options
 ```rust
+use std::time::Duration;
+use sjl::{LoggerOptions, LogLevel};
+
 fn main() {
     let logger = LoggerOptions::default()
         // Context are k/v pairs that are added to every log line
@@ -146,7 +149,7 @@ fn main() {
         .timestamp_format("%FT%I:%M:%S%p")
         // Pretty-print JSON using multiple lines. Default is compact, single line.
         .pretty(true)
-        // Spawns a background worker thread and returns the logger. Only call this once or it'll panic.
+        // Spawns a background worker thread and returns the logger
         .init();
 
     logger.error("Saul Goodman!", ());
@@ -168,7 +171,8 @@ fn main() {
 
 
 
-### Running Tests
-```json
-cargo llvm-cov --html -- --test-threads=1
+## Running Tests
+```bash
+cargo llvm-cov --html
 ```
+> Tests run single threaded because only one logger can exist at a time. Parallel tests 
