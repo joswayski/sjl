@@ -2,11 +2,11 @@
 
  📦 **[crates.io](https://crates.io/crates/sjl)** | 📚 **[docs.rs](https://docs.rs/sjl)**
 
-### What
-It's a Simple JSON Logger. It logs JSON.
+## What
+It's a Simple JSON Logger. It logs JSON to stdout.
 
 
-### Why?
+## Why?
 The most popular logging crate, [tracing](https://crates.io/crates/tracing), has [problems with nested JSON](https://www.reddit.com/r/rust/comments/1k75jvc/how_can_i_emit_a_tracing_event_with_an_unescaped/) unless you use the `valuable` crate with it which is [unstable and behind a feature flag for 3 years](https://github.com/tokio-rs/tracing/discussions/1906)... but that [still has issues with enums](https://github.com/tokio-rs/tracing/issues/3051) and doesn't feel natural to use with `.as_value()` everywhere.  The [slog](https://crates.io/crates/slog) crate has similar issues—I've written about both [here](https://josevalerio.com/rust-json-logging).
 
 If you just want a Simple JSON Logger, you might find this useful.
@@ -15,12 +15,14 @@ If you just want a Simple JSON Logger, you might find this useful.
 
  ## Installation
 
- ```bash
+ ```json
  cargo add sjl
  ```
 
 ## Usage
 ```rust
+use sjl::Logger;
+
 fn main() {
     let logger = Logger::new();
 
@@ -29,7 +31,7 @@ fn main() {
 ```
 
 ### Outputs
-```bash
+```json
 {"timestamp":"2026-05-21T02:45:03.456Z","level":"info","message":"Hello"}
 ```
 
@@ -82,7 +84,7 @@ fn main() {
 ```
 
 ### Outputs
-```bash
+```json
 {
   "timestamp": "2026-05-21T03:39:36.780Z",
   "level": "info",
@@ -137,7 +139,7 @@ fn main() {
         .context("environment", "production")
         // Minimum severity that actually gets emitted.
         // For example, setting this to Info will not show Debug logs
-        // Heirarchy: Debug < Info < Warn < Error
+        // Hierarchy: Debug < Info < Warn < Error
         .min_level(LogLevel::Warn)
         // Batching
         // Flush once the batch reaches this many bytes
@@ -161,7 +163,7 @@ fn main() {
         .buffer_pool_max_capacity(100_000)
         // Rename the `timestamp` field in the output
         .timestamp_key("time")
-        // Custom chrono  strftime format. Default is RFC 3339 with milliseconds.
+        // Custom chrono strftime format. Default is RFC 3339 with milliseconds.
         // Build your own from here: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
         .timestamp_format("%FT%I:%M:%S%p")
         // Pretty-print JSON using multiple lines. Default is compact, single line.
@@ -175,7 +177,7 @@ fn main() {
 ```
 
 ### Outputs
-```bash
+```json
 {
   "time": "2026-05-21T03:35:04AM",
   "level": "error",
@@ -189,6 +191,6 @@ fn main() {
 
 
 ### Running Tests
-```bash
+```json
 cargo llvm-cov --html -- --test-threads=1
 ```
