@@ -15,7 +15,7 @@ use std::{
 };
 
 const OVERSIZED_LOG_PREVIEW_LENGTH: usize = 200; // todo allow override?
-const OVERSIZED_LOG_RESET_WINDOW: Duration = Duration::from_hours(4); // todo allow override?
+const OVERSIZED_LOG_RESET_WINDOW: Duration = Duration::from_secs(4 * 60 * 60); // todo allow override?
 
 #[must_use = "Logger does nothing unless you keep it and call log methods like `.info()`"]
 pub struct Logger {
@@ -73,16 +73,15 @@ impl Logger {
         self.log(LogLevel::Debug, message.as_ref(), custom_data);
     }
 
+    fn should_log(&self, log_level: LogLevel) -> bool {
+        log_level.severity() >= self.min_level.severity()
+    }
     fn log<CustomData: Serialize>(
         &self,
         log_level: LogLevel,
         message: impl AsRef<str>,
         custom_data: CustomData,
     ) {
-        if log_level.severity() < self.min_level.severity() {
-            return;
-        }
-
         if self.sender.is_none() {
             return;
         }
@@ -131,6 +130,16 @@ impl Logger {
 
         if let Some(sender) = &self.sender {
             let _ = sender.send(buf);
+        }
+    }
+
+    fn warn_every_n(pct_oversized: f64, total_messages_count: usize) -> usize {
+        // If 50% of our logs are oversized, give a warning every 1 in 100 logs
+        // small minimum of 1000 to keep noise down right from the beginning
+        match pct_oversized {
+            p if p > 50.0 && total_messages_count > 1000 => 200,
+            p if p > 30.0 && total_messages_count > 1000 => 500,
+            _ => 1000, // Default to 1 in 1000 logs
         }
     }
 
@@ -183,17 +192,12 @@ impl Logger {
                                     / total_messages_count as f64
                                     * 100.0;
 
-                                // If 50% of our logs are oversized, give a warning every 1 in 5 logs
-                                // small minimum of 1000 to keep noise down right from the beginning
-                                let warn_every_n = match percentage_of_oversized {
-                                    p if p > 50.0 && total_messages_count > 1000 => 5,
-                                    p if p > 30.0 && total_messages_count > 1000 => 10,
-                                    _ => 100, // Default to 1% of logs (1 in 100)
-                                };
-
                                 // Log a warning on first ocurrance or every N (set above)
                                 if oversized_messages_count == 1
-                                    || oversized_messages_count.is_multiple_of(warn_every_n)
+                                    || oversized_messages_count.is_multiple_of(Self::warn_every_n(
+                                        percentage_of_oversized,
+                                        total_messages_count,
+                                    ))
                                 {
                                     // If its an oversized string, we obviously don't want to log the whole thing
                                     let preview_len =
@@ -264,5 +268,81 @@ impl Logger {
         let _ = stdout.flush();
 
         batch.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_warn_every_n_defaults_to_100_when_under_min_count() {
+        // even if almost everything is oversized, if we havent hit am inimum don't log anything
+        assert_eq!(Logger::warn_every_n(99.9999, 500), 1000);
+        assert_eq!(Logger::warn_every_n(99.9999, 1000), 1000)
+    }
+
+    #[test]
+    fn test_warn_every_n_returns_200_when_majority_oversized() {
+        assert_eq!(Logger::warn_every_n(50.1, 1001), 200);
+        assert_eq!(Logger::warn_every_n(75.0, 10_000_000), 200);
+        assert_eq!(Logger::warn_every_n(100.0, 1001), 200);
+    }
+
+    #[test]
+    fn test_warn_every_n_returns_500_when_sorta_oversized() {
+        assert_eq!(Logger::warn_every_n(32.0, 1001), 500);
+        assert_eq!(Logger::warn_every_n(42.0, 10_000_000), 500);
+    }
+
+    #[test]
+    fn test_warn_every_n_handles_nan_default() {
+        assert_eq!(Logger::warn_every_n(f64::NAN, 1001), 1000);
+    }
+
+    #[test]
+    fn test_should_log_min_level_debug() {
+        let logger = LoggerOptions::default().min_level(LogLevel::Debug).init();
+
+        assert_eq!(logger.should_log(LogLevel::Debug), true);
+        assert_eq!(logger.should_log(LogLevel::Info), true);
+        assert_eq!(logger.should_log(LogLevel::Warn), true);
+        assert_eq!(logger.should_log(LogLevel::Error), true);
+    }
+
+    #[test]
+    fn test_should_log_min_level_info() {
+        let logger = LoggerOptions::default().min_level(LogLevel::Info).init();
+
+        assert_eq!(logger.should_log(LogLevel::Debug), false);
+        assert_eq!(logger.should_log(LogLevel::Info), true);
+        assert_eq!(logger.should_log(LogLevel::Warn), true);
+        assert_eq!(logger.should_log(LogLevel::Error), true);
+    }
+
+    #[test]
+    fn test_should_log_min_level_warn() {
+        let logger = LoggerOptions::default().min_level(LogLevel::Warn).init();
+
+        assert_eq!(logger.should_log(LogLevel::Debug), false);
+        assert_eq!(logger.should_log(LogLevel::Info), false);
+        assert_eq!(logger.should_log(LogLevel::Warn), true);
+        assert_eq!(logger.should_log(LogLevel::Error), true);
+    }
+
+    #[test]
+    fn test_should_log_min_level_error() {
+        let logger = LoggerOptions::default().min_level(LogLevel::Error).init();
+
+        assert_eq!(logger.should_log(LogLevel::Debug), false);
+        assert_eq!(logger.should_log(LogLevel::Info), false);
+        assert_eq!(logger.should_log(LogLevel::Warn), false);
+        assert_eq!(logger.should_log(LogLevel::Error), true);
+    }
+
+    #[test]
+    fn test_should_log_sender_exists() {
+        let logger = LoggerOptions::default().min_level(LogLevel::Error).init();
+        assert_eq!(logger.should_log(LogLevel::Error), true);
     }
 }
