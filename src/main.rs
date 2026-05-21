@@ -1,122 +1,45 @@
-#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction)]
-#![allow(
-    clippy::missing_docs_in_private_items,
-    clippy::arbitrary_source_item_ordering,
-    clippy::allow_attributes_without_reason,
-    clippy::blanket_clippy_restriction_lints
-)]
-use serde::Serialize;
-use serde_json::json;
-use sjl::{LogLevel, Logger, RGB, debug, error, info, warn};
-
-#[derive(Serialize)] // This is all you need
-struct User {
-    id: u64,
-    name: String,
-}
-
-#[derive(Serialize)]
-enum OrderStatus {
-    Pending,
-    Shipped { tracking_number: String },
-}
-
-#[derive(Serialize)]
-struct Order {
-    user: User,
-    items: Vec<OrderItem>,
-}
-
-#[derive(Serialize)]
-struct OrderItem {
-    name: String,
-    price: f64,
-    quantity: u32,
-    status: OrderStatus,
-}
+use sjl::{LogLevel, LoggerOptions};
+use std::time::Duration;
 
 fn main() {
-    // Initialize once at startup
-    Logger::init()
-        // Optional config
-        .min_level(LogLevel::Debug) // Minimum log level (default: Debug)
-        .batch_size(100) // Logs per batch (default: 50)
-        .batch_duration_ms(100) // Max ms before flush (default: 50)
-        .buffer_size(5000) // Channel capacity (default: 1024)
-        .timestamp_format("%Y-%m-%dT%H:%M:%S%.3fZ") // ISO 8601 (default)
-        .timestamp_key("tz") // Rename this field if you want! Default is timestamp
-        .pretty(true) // Pretty-print JSON (default: false)
-        .debug_color(RGB::new(38, 45, 56)) // Customize colors
-        .info_color(RGB::new(15, 115, 255))
-        .warn_color(RGB::new(247, 155, 35))
-        .error_color(RGB::new(255, 0, 0))
-        // Context fields appear in EVERY log message at the top level
+    let logger = LoggerOptions::default()
+        // Context are k/v pairs that are added to every log line
+        // use these for identifiers like service, environment, version, etc.
+        .context("service", "payments")
         .context("environment", "production")
-        .context("service", "order-api")
-        .context(
-            "metadata",
-            json!({
-                "instance_id": "i-1234567890abcdef0",
-                "pod_name": "order-api-7d4f8c9b5-x8k2p",
-                "git_sha": "abc123f"
-            }),
-        )
-        // Call this at the end
-        .build();
+        // Minimum severity that actually gets emitted.
+        // For example, setting this to Info will not show Debug logs
+        // Hierarchy: Debug < Info < Warn < Error
+        .min_level(LogLevel::Warn)
+        // Batching
+        // Flush once the batch reaches this many bytes
+        .flush_at_bytes(1_000)
+        // ...or once we have this many messages
+        .flush_at_messages(100)
+        // ...or once this much time has passed since the last flush.
+        // Whatever comes first wins.
+        .flush_interval(Duration::from_millis(250))
+        // Buffer pool
+        // How many buffers to keep in the pool
+        // Set this to around your expected concurrent in-flight log count
+        .buffer_pool_size(20)
+        // Starting capacity (in bytes) of each buffer. Tune this to your typical log size
+        // so that hot path logging never has to grow the buffers
+        .buffer_pool_initial_capacity(4_000)
+        // Hard cap on how big the buffers can get. Any that exceed this size
+        // will get shrunk back down before being returned to the pool
+        // So that one giant log can't be a memory hog.
+        // Oversized logs also trigger occasional warnings
+        .buffer_pool_max_capacity(100_000)
+        // Rename the `timestamp` field in the output
+        .timestamp_key("time")
+        // Custom chrono strftime format. Default is RFC 3339 with milliseconds.
+        // Build your own from here: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+        .timestamp_format("%FT%I:%M:%S%p")
+        // Pretty-print JSON using multiple lines. Default is compact, single line.
+        .pretty(true)
+        // Spawns a background worker thread and returns the logger. Only call this once or it'll panic.
+        .init();
 
-    // Strings
-    debug!("App started");
-    info!("Server listening", "0.0.0.0:8080");
-
-    // Structs
-    info!(User {
-        id: 1,
-        name: "Alice".into()
-    });
-    info!(
-        "User authenticated",
-        User {
-            id: 1,
-            name: "Alice".into()
-        }
-    );
-
-    // Enums (serialize correctly!)
-    warn!(OrderStatus::Pending);
-    warn!(OrderStatus::Shipped {
-        tracking_number: "1Z999AA10123456784".into()
-    });
-
-    // Ad-hoc JSON
-    error!(json!({
-        "error": "connection_failed",
-        "host": "db.example.com"
-    }));
-
-    // Complex: Vec of structs with enums
-    info!(
-        "Order processed",
-        Order {
-            user: User {
-                id: 42,
-                name: "John".into()
-            },
-            items: vec![
-                OrderItem {
-                    name: "Widget".into(),
-                    price: 29.99,
-                    quantity: 2,
-                    status: OrderStatus::Shipped {
-                        tracking_number: "1Z999AA10123456784".into()
-                    },
-                },
-                OrderItem {
-                    name: "Gadget".into(),
-                    price: 49.99,
-                    quantity: 1,
-                    status: OrderStatus::Pending,
-                },
-            ],
-        }
-    );
+    logger.error("Saul Goodman!", ());
 }

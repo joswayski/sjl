@@ -1,11 +1,11 @@
-#![warn(clippy::all, clippy::pedantic, clippy::nursery)]
-mod colors;
-mod constants;
-mod globals;
-mod logger;
-mod macros;
-mod utils;
+pub use serde_json::json;
 
-pub use colors::RGB;
-pub use globals::get_global_logger;
-pub use logger::{LogLevel, Logger, LoggerOptions};
+mod logger;
+pub use logger::Logger;
+
+mod log_event;
+mod log_level;
+mod timestamp;
+pub use log_level::LogLevel;
+mod logger_options;
+pub use logger_options::LoggerOptions;
